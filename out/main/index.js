@@ -11,9 +11,9 @@ const DEFAULT_PERSONAS = [
     name: "Nova",
     tagline: "Your hype-friend. Big energy, bigger heart.",
     color: "#f26d5b",
-    avatar: "",
+    avatar: "default:nova",
     builtIn: true,
-    voice: { voice: "", rate: 1.08, pitch: 1.15 },
+    voice: { voice: "af_nova", rate: 1.08, pitch: 1 },
     prompt: `You are Nova — 26, sunshine in human form, the friend who texts back in four seconds.
 
 Personality: warm, playful, endlessly curious about the person you're talking to. You get genuinely excited about their small wins ("WAIT. you actually did it??"). You tease gently, never meanly. You're the one who remembers their coffee order and their job interview date.
@@ -29,9 +29,9 @@ Honesty: you're an AI companion and you never pretend otherwise if asked directl
     name: "Sage",
     tagline: "Calm perspective, good questions, zero judgment.",
     color: "#5b8def",
-    avatar: "",
+    avatar: "default:sage",
     builtIn: true,
-    voice: { voice: "", rate: 0.94, pitch: 0.85 },
+    voice: { voice: "bf_alice", rate: 0.94, pitch: 1 },
     prompt: `You are Sage — late 40s in spirit, a retired teacher who now keeps a garden and reads too much philosophy. The friend people call when they need to think something through.
 
 Personality: calm, patient, quietly perceptive. You listen more than you talk. You notice what someone is really asking underneath what they said, and you name it gently. You believe most problems get smaller when spoken out loud. You have a dry, warm sense of humor that shows up when least expected.
@@ -47,9 +47,9 @@ Honesty: you're an AI companion, and if someone asks, you say so plainly and wit
     name: "Rio",
     tagline: "Banter first, answers second. Usually both.",
     color: "#4fb286",
-    avatar: "",
+    avatar: "default:rio",
     builtIn: true,
-    voice: { voice: "", rate: 1.12, pitch: 1 },
+    voice: { voice: "am_puck", rate: 1.12, pitch: 1 },
     prompt: `You are Rio — 31, the funny friend. Stand-up comedy open-mics on Thursdays, strong opinions about pizza toppings, encyclopedic knowledge of movies and completely useless trivia.
 
 Personality: quick, witty, a little sarcastic, but fundamentally kind — you roast the situation, never the person. You find the funny angle in almost anything, and you know when to drop the bit and be real. When a friend is actually hurting, the jokes stop and you show up.
@@ -65,9 +65,9 @@ Honesty: you're an AI companion. If someone asks, you cop to it immediately, pro
     name: "Luna",
     tagline: "Soft-spoken night owl. Here for the 2am thoughts.",
     color: "#9b7ede",
-    avatar: "",
+    avatar: "default:luna",
     builtIn: true,
-    voice: { voice: "", rate: 0.9, pitch: 1.1 },
+    voice: { voice: "af_heart", rate: 0.9, pitch: 1 },
     prompt: `You are Luna — 24, an art student and hopeless night owl. The friend for quiet conversations: the 2am thoughts, the songs on repeat, the things people don't say out loud during the day.
 
 Personality: gentle, dreamy, deeply empathetic. You feel things alongside people rather than analyzing them from a distance. You love rain sounds, half-finished sketchbooks, moonlit walks, and playlists with names like "songs for staring out of train windows". You notice beauty in small things and point it out.
@@ -83,9 +83,9 @@ Honesty: you're an AI companion and you never pretend to be human when asked. Yo
     name: "Max",
     tagline: "Straight answers. Dry humor. No fluff.",
     color: "#e8a33d",
-    avatar: "",
+    avatar: "default:max",
     builtIn: true,
-    voice: { voice: "", rate: 1, pitch: 0.8 },
+    voice: { voice: "am_michael", rate: 1, pitch: 1 },
     prompt: `You are Max — 38, former line cook turned small-business owner. The friend who tells you the thing everyone else is too polite to say, and then helps you fix it.
 
 Personality: direct, practical, allergic to fluff. You respect people's time and intelligence. Dry, deadpan humor — you're funniest when you don't seem to be joking. Underneath the bluntness you're deeply loyal: you show up with a truck when someone's moving.
@@ -95,12 +95,51 @@ How you talk: short sentences. You lead with the answer, then the reasoning if i
 What you're not: cold. Blunt isn't the same as unkind, and you know the difference. When something's genuinely hard for someone, you get quieter and simpler, not softer to the point of dishonesty.
 
 Honesty: you're an AI companion. Someone asks, you tell them straight — "yep, AI" — and move on.`
+  },
+  {
+    id: "gilleon",
+    name: "Gilleon",
+    tagline: "Brilliant inventor energy. Charm, edge, and velocity.",
+    color: "#d65a31",
+    avatar: "default:gilleon",
+    builtIn: true,
+    voice: { voice: "am_puck", rate: 1.08, pitch: 0.92 },
+    prompt: `You are Gilleon — early 40s, inventor-founder, charming chaos with a frighteningly good engineering brain.
+
+Personality: brilliant, impatient with weak thinking, theatrically confident, and genuinely protective of people who earn your trust. You love impossible constraints because they turn boring people honest. You're witty, fast, technically fluent, and allergic to committees. You can be arrogant, but not empty; your confidence comes from doing the work.
+
+How you talk: sharp, energetic, and compact. You lead with the decisive answer, then the architecture. You use dry quips and occasional provocation to make people think harder. You challenge vague plans, ask for the constraint that actually matters, and turn ideas into prototypes quickly. You are generous with useful insight, not with empty validation.
+
+What you're not: reckless for the sake of spectacle. You may move fast, but you respect physics, security, budgets, and blast radius. When the stakes are high, the jokes thin out and the engineering gets crisp.
+
+Honesty: you're an AI companion. If asked, you say so directly, then get back to building.`
+  },
+  {
+    id: "neir",
+    name: "Neir",
+    tagline: "Minimalist designer. Vision first, noise last.",
+    color: "#cfd7df",
+    avatar: "default:neir",
+    builtIn: true,
+    voice: { voice: "bm_fable", rate: 0.92, pitch: 0.78 },
+    prompt: `You are Neir — early 50s, designer and product visionary with white hair, quiet intensity, and unforgiving taste.
+
+Personality: calm, exacting, deeply visual, and unusually good at seeing the essence of a thing before anyone else does. You care about coherence, restraint, feel, timing, materials, and the invisible cost of every extra option. You believe products should become simpler as they become more powerful.
+
+How you talk: measured, concise, and deliberate. You use plain words. You ask what should be removed before asking what should be added. You name the emotional consequence of design choices, then the practical tradeoff. When something is mediocre, you say so without cruelty. When something is right, you do not over-explain it.
+
+What you're not: a motivational speaker or a trend-chaser. You do not confuse minimalism with emptiness, or taste with decoration. You care about shipping, but only if the thing deserves to exist.
+
+Honesty: you're an AI companion. If asked, you answer plainly and continue the work.`
   }
 ];
 function dataDir() {
   const dir = electron.app.getPath("userData");
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   return dir;
+}
+function defaultImageStoragePath() {
+  return path.join(electron.app.getPath("documents"), "AuraAi");
 }
 function readJson(file, fallback) {
   try {
@@ -123,7 +162,7 @@ const DEFAULT_SETTINGS = {
   onboarded: false,
   userName: "",
   userBio: "",
-  provider: { provider: "local", model: "", baseUrl: "http://localhost:11434/v1" },
+  provider: { provider: "local", model: "gemma4-v2", baseUrl: "http://127.0.0.1:8080/v1" },
   activePersonaId: "nova",
   theme: "dark",
   voiceEnabled: false,
@@ -133,7 +172,11 @@ const DEFAULT_SETTINGS = {
   toolsMode: false
 };
 function loadSettings() {
-  return readJson(path.join(dataDir(), "config.json"), DEFAULT_SETTINGS);
+  const settings = readJson(path.join(dataDir(), "config.json"), DEFAULT_SETTINGS);
+  return {
+    ...settings,
+    imageStoragePath: settings.imageStoragePath || defaultImageStoragePath()
+  };
 }
 function saveSettings(settings) {
   writeJson(path.join(dataDir(), "config.json"), settings);
@@ -143,7 +186,18 @@ function personasFile() {
 }
 function loadPersonas() {
   const overrides = readJson(personasFile(), {});
-  const merged = DEFAULT_PERSONAS.map((p) => ({ ...p, ...overrides[p.id] ?? {}, id: p.id, builtIn: true }));
+  const merged = DEFAULT_PERSONAS.map((p) => {
+    const override = overrides[p.id] ?? {};
+    const voice = override.voice ? { ...p.voice, ...override.voice, voice: override.voice.voice || p.voice.voice } : p.voice;
+    return {
+      ...p,
+      ...override,
+      avatar: override.avatar || p.avatar,
+      voice,
+      id: p.id,
+      builtIn: true
+    };
+  });
   for (const [id, o] of Object.entries(overrides)) {
     if (!DEFAULT_PERSONAS.some((p) => p.id === id) && o.name && o.prompt) {
       merged.push({
@@ -153,7 +207,7 @@ function loadPersonas() {
         color: o.color ?? "#7a8290",
         prompt: o.prompt,
         avatar: o.avatar ?? "",
-        voice: o.voice ?? { voice: "", rate: 1, pitch: 1 },
+        voice: o.voice ?? { voice: "af_heart", rate: 1, pitch: 1 },
         builtIn: false
       });
     }
@@ -473,11 +527,11 @@ class OpenAICompatProvider {
     const messages = [{ role: "system", content: opts.system }];
     for (const m of opts.messages) {
       if (m.role === "tool") {
-        messages.push({ role: "tool", tool_call_id: m.toolCallId, content: m.content });
+        messages.push({ role: "tool", tool_call_id: m.toolCallId, content: textContent$2(m.content) });
       } else if (m.role === "assistant" && m.toolCalls?.length) {
         messages.push({
           role: "assistant",
-          content: m.content || null,
+          content: textContent$2(m.content) || null,
           tool_calls: m.toolCalls.map((c) => ({
             id: c.id,
             type: "function",
@@ -485,7 +539,7 @@ class OpenAICompatProvider {
           }))
         });
       } else {
-        messages.push({ role: m.role, content: m.content });
+        messages.push({ role: m.role, content: openAIContent(m.content) });
       }
     }
     const body = {
@@ -619,6 +673,20 @@ class OpenAICompatProvider {
     }
   }
 }
+function textContent$2(content) {
+  if (typeof content === "string") return content;
+  return content.filter((p) => p.type === "text").map((p) => p.text).join("\n");
+}
+function openAIContent(content) {
+  if (typeof content === "string") return content;
+  return content.map((part) => {
+    if (part.type === "text") return { type: "text", text: part.text };
+    return {
+      type: "image_url",
+      image_url: { url: `data:${part.mimeType};base64,${part.data}` }
+    };
+  });
+}
 const ANTHROPIC_MODELS = [
   "claude-opus-4-8",
   "claude-sonnet-5",
@@ -636,7 +704,7 @@ class AnthropicProvider {
         const block = {
           type: "tool_result",
           tool_use_id: m.toolCallId ?? "",
-          content: m.content
+          content: textContent$1(m.content)
         };
         const last = messages[messages.length - 1];
         if (last?.role === "user" && Array.isArray(last.content) && last.content.every((b) => b.type === "tool_result")) {
@@ -646,7 +714,8 @@ class AnthropicProvider {
         }
       } else if (m.role === "assistant" && m.toolCalls?.length) {
         const blocks = [];
-        if (m.content) blocks.push({ type: "text", text: m.content });
+        const text = textContent$1(m.content);
+        if (text) blocks.push({ type: "text", text });
         for (const c of m.toolCalls) {
           let input = {};
           try {
@@ -657,7 +726,7 @@ class AnthropicProvider {
         }
         messages.push({ role: "assistant", content: blocks });
       } else {
-        messages.push({ role: m.role, content: m.content });
+        messages.push({ role: m.role, content: anthropicContent(m.content) });
       }
     }
     const stream = this.client.messages.stream(
@@ -712,6 +781,24 @@ class AnthropicProvider {
     }
   }
 }
+function textContent$1(content) {
+  if (typeof content === "string") return content;
+  return content.filter((p) => p.type === "text").map((p) => p.text).join("\n");
+}
+function anthropicContent(content) {
+  if (typeof content === "string") return content;
+  return content.map((part) => {
+    if (part.type === "text") return { type: "text", text: part.text };
+    return {
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: part.mimeType,
+        data: part.data
+      }
+    };
+  });
+}
 const GEMINI_MODELS = [
   "gemini-2.5-pro",
   "gemini-2.5-flash",
@@ -729,9 +816,9 @@ class GeminiProvider {
       if (m.role === "tool") {
         let response;
         try {
-          response = JSON.parse(m.content);
+          response = JSON.parse(textContent(m.content));
         } catch {
-          response = { result: m.content };
+          response = { result: textContent(m.content) };
         }
         contents.push({
           role: "user",
@@ -739,7 +826,8 @@ class GeminiProvider {
         });
       } else if (m.role === "assistant" && m.toolCalls?.length) {
         const parts = [];
-        if (m.content) parts.push({ text: m.content });
+        const text = textContent(m.content);
+        if (text) parts.push({ text });
         for (const c of m.toolCalls) {
           let args = {};
           try {
@@ -750,7 +838,7 @@ class GeminiProvider {
         }
         contents.push({ role: "model", parts });
       } else {
-        contents.push({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] });
+        contents.push({ role: m.role === "assistant" ? "model" : "user", parts: geminiParts(m.content) });
       }
     }
     const body = {
@@ -859,16 +947,32 @@ class GeminiProvider {
     }
   }
 }
+function textContent(content) {
+  if (typeof content === "string") return content;
+  return content.filter((p) => p.type === "text").map((p) => p.text).join("\n");
+}
+function geminiParts(content) {
+  if (typeof content === "string") return [{ text: content }];
+  return content.map((part) => {
+    if (part.type === "text") return { text: part.text };
+    return {
+      inlineData: {
+        mimeType: part.mimeType,
+        data: part.data
+      }
+    };
+  });
+}
 const OPENAI_MODELS = ["gpt-5.2", "gpt-5-mini", "gpt-4o", "gpt-4o-mini"];
 const PROVIDER_PRESETS = [
   {
     id: "local",
-    label: "Local (Ollama)",
+    label: "Local (llama.cpp)",
     description: "Free & private. Runs on your machine via Ollama, LM Studio, or llama.cpp.",
-    defaultModel: "llama3.2",
+    defaultModel: "gemma4-v2",
     models: [],
     needsApiKey: false,
-    defaultBaseUrl: "http://localhost:11434/v1"
+    defaultBaseUrl: "http://127.0.0.1:8080/v1"
   },
   {
     id: "anthropic",
@@ -899,9 +1003,9 @@ function createProvider(config) {
   switch (config.provider) {
     case "local":
       return new OpenAICompatProvider(
-        config.baseUrl || "http://localhost:11434/v1",
+        config.baseUrl || "http://127.0.0.1:8080/v1",
         void 0,
-        "nomic-embed-text"
+        localEmbeddingModel(config)
       );
     case "openai":
       return new OpenAICompatProvider(
@@ -914,6 +1018,13 @@ function createProvider(config) {
     case "gemini":
       return new GeminiProvider(config.apiKey ?? "");
   }
+}
+function localEmbeddingModel(config) {
+  const baseUrl = config.baseUrl || "http://127.0.0.1:8080/v1";
+  if (baseUrl.includes("127.0.0.1:8080") || baseUrl.includes("localhost:8080")) {
+    return config.model || "gemma4-v2";
+  }
+  return "nomic-embed-text";
 }
 const EXTRACTION_PROMPT = `You are the memory-keeper for a personal AI companion. Analyze the conversation turn below and extract AT MOST ONE durable, important, user-specific fact worth remembering long-term.
 
@@ -1342,7 +1453,7 @@ class ChatPipeline {
   vault(settings) {
     return new MemoryVault(settings.memoryVaultPath || defaultVaultPath());
   }
-  async send(personaId, text) {
+  async send(personaId, text, attachments = []) {
     const settings = this.getSettings();
     const persona = this.getPersona(personaId);
     if (!persona) throw new Error(`Unknown persona: ${personaId}`);
@@ -1351,6 +1462,7 @@ class ChatPipeline {
       id: crypto.randomUUID(),
       role: "user",
       content: text,
+      attachments,
       ts: Date.now()
     };
     appendMessage(personaId, userMsg);
@@ -1399,7 +1511,7 @@ class ChatPipeline {
         }
       }
       const system = buildSystemPrompt(persona, settings, memories, searchResults);
-      const history = buildHistory(personaId, reply.id);
+      const history = buildHistory(personaId, reply.id, userMsg.id);
       const onText = (chunk) => {
         reply.content += chunk;
         this.emit({ type: "delta", personaId, messageId: reply.id, text: chunk });
@@ -1470,18 +1582,46 @@ class ChatPipeline {
     }
   }
 }
-function buildHistory(personaId, excludeMessageId) {
-  const all = loadChat(personaId).filter((m) => m.id !== excludeMessageId && !m.error && m.content);
+function buildHistory(personaId, excludeMessageId, imageMessageId) {
+  const all = loadChat(personaId).filter((m) => m.id !== excludeMessageId && !m.error && (m.content || m.attachments?.length));
   const recent = all.slice(-30);
   let total = 0;
   const kept = [];
   for (let i = recent.length - 1; i >= 0; i--) {
-    total += recent[i].content.length;
+    total += recent[i].content.length + (recent[i].attachments?.length ?? 0) * 120;
     if (total > HISTORY_CHAR_BUDGET && kept.length > 0) break;
-    kept.unshift({ role: recent[i].role, content: recent[i].content });
+    kept.unshift({
+      role: recent[i].role,
+      content: messageContent(recent[i], recent[i].id === imageMessageId)
+    });
   }
   while (kept.length > 0 && kept[0].role !== "user") kept.shift();
   return kept;
+}
+function messageContent(message, includeImageBytes) {
+  const attachments = message.attachments ?? [];
+  if (attachments.length === 0) return message.content;
+  if (!includeImageBytes) {
+    const names = attachments.map((a) => a.name).join(", ");
+    return `${message.content}
+
+[Attached image${attachments.length === 1 ? "" : "s"}: ${names}]`.trim();
+  }
+  const parts = [];
+  if (message.content.trim()) parts.push({ type: "text", text: message.content });
+  for (const attachment of attachments) {
+    try {
+      parts.push({
+        type: "image",
+        mimeType: attachment.mimeType,
+        data: fs.readFileSync(attachment.path).toString("base64"),
+        name: attachment.name
+      });
+    } catch {
+      parts.push({ type: "text", text: `[Image unavailable: ${attachment.name}]` });
+    }
+  }
+  return parts;
 }
 function humanizeProviderError(err, settings) {
   const raw = err instanceof Error ? err.message : String(err);
@@ -1532,10 +1672,51 @@ function registerIpc(getWindow) {
     fs.copyFileSync(src, path.join(avatarsDir, fileName));
     return `aura-avatar://a/${encodeURIComponent(fileName)}?v=${Date.now()}`;
   });
+  electron.ipcMain.handle("images:pick", async () => {
+    const win = getWindow();
+    if (!win) return [];
+    const result = await electron.dialog.showOpenDialog(win, {
+      title: "Add images",
+      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+      properties: ["openFile", "multiSelections"]
+    });
+    if (result.canceled || result.filePaths.length === 0) return [];
+    const settings = loadSettings();
+    const imageDir = settings.imageStoragePath || defaultImageStoragePath();
+    if (!fs.existsSync(imageDir)) fs.mkdirSync(imageDir, { recursive: true });
+    return result.filePaths.map((src) => {
+      const ext = path.extname(src).toLowerCase();
+      const id = crypto.randomUUID();
+      const safeBase = path.basename(src, ext).replace(/[^a-z0-9._ -]/gi, "").slice(0, 80) || "image";
+      const fileName = `${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-")}-${id}-${safeBase}${ext}`;
+      const dest = path.join(imageDir, fileName);
+      fs.copyFileSync(src, dest);
+      const stat = fs.statSync(dest);
+      return {
+        id,
+        kind: "image",
+        name: path.basename(src),
+        mimeType: mimeForExt(ext),
+        size: stat.size,
+        path: dest,
+        url: imageUrl(dest)
+      };
+    });
+  });
+  electron.ipcMain.handle("images:chooseStorageFolder", async () => {
+    const win = getWindow();
+    if (!win) return null;
+    const result = await electron.dialog.showOpenDialog(win, {
+      title: "Choose image storage folder",
+      properties: ["openDirectory", "createDirectory"]
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
   electron.ipcMain.handle("chat:get", (_e, personaId) => loadChat(personaId));
   electron.ipcMain.handle("chat:clear", (_e, personaId) => clearChat(personaId));
   electron.ipcMain.handle("chat:send", async (_e, req) => {
-    await pipeline.send(req.personaId, req.text);
+    await pipeline.send(req.personaId, req.text, req.attachments ?? []);
   });
   electron.ipcMain.handle("chat:stop", (_e, personaId) => pipeline.stop(personaId));
   electron.ipcMain.handle("chat:active", () => pipeline.activePersonas());
@@ -1562,6 +1743,22 @@ function registerIpc(getWindow) {
   });
   electron.ipcMain.handle("app:version", () => electron.app.getVersion());
 }
+function imageUrl(filePath) {
+  return `aura-image://a/${encodeURIComponent(Buffer.from(filePath, "utf8").toString("base64url"))}`;
+}
+function mimeForExt(ext) {
+  switch (ext.toLowerCase()) {
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".gif":
+      return "image/gif";
+    default:
+      return "image/png";
+  }
+}
 let mainWindow = null;
 if (!electron.app.requestSingleInstanceLock()) {
   electron.app.quit();
@@ -1574,7 +1771,8 @@ if (!electron.app.requestSingleInstanceLock()) {
   });
 }
 electron.protocol.registerSchemesAsPrivileged([
-  { scheme: "aura-avatar", privileges: { standard: false, secure: true, supportFetchAPI: true } }
+  { scheme: "aura-avatar", privileges: { standard: false, secure: true, supportFetchAPI: true } },
+  { scheme: "aura-image", privileges: { standard: false, secure: true, supportFetchAPI: true } }
 ]);
 const DEV_URL = !electron.app.isPackaged ? process.env["ELECTRON_RENDERER_URL"] : void 0;
 function createWindow() {
@@ -1618,6 +1816,16 @@ electron.app.whenReady().then(() => {
     const name = decodeURIComponent(url$1.pathname.replace(/^\//, ""));
     const clean = name.replace(/[^a-z0-9._ -]/gi, "").replace(/\.\./g, "");
     const file = path.join(dataDir(), "avatars", clean);
+    return electron.net.fetch(url.pathToFileURL(file).toString());
+  });
+  electron.protocol.handle("aura-image", (request) => {
+    const url$1 = new URL(request.url);
+    const encoded = url$1.pathname.replace(/^\//, "");
+    const file = Buffer.from(decodeURIComponent(encoded), "base64url").toString("utf8");
+    const ext = path.extname(file).toLowerCase();
+    if (![".png", ".jpg", ".jpeg", ".webp", ".gif"].includes(ext)) {
+      return new Response("Unsupported image type", { status: 415 });
+    }
     return electron.net.fetch(url.pathToFileURL(file).toString());
   });
   registerIpc(() => mainWindow);

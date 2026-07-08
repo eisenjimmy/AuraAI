@@ -9,12 +9,12 @@ export const OPENAI_MODELS = ['gpt-5.2', 'gpt-5-mini', 'gpt-4o', 'gpt-4o-mini']
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   {
     id: 'local',
-    label: 'Local (Ollama)',
+    label: 'Local (llama.cpp)',
     description: 'Free & private. Runs on your machine via Ollama, LM Studio, or llama.cpp.',
-    defaultModel: 'llama3.2',
+    defaultModel: 'gemma4-v2',
     models: [],
     needsApiKey: false,
-    defaultBaseUrl: 'http://localhost:11434/v1'
+    defaultBaseUrl: 'http://127.0.0.1:8080/v1'
   },
   {
     id: 'anthropic',
@@ -46,9 +46,9 @@ export function createProvider(config: ProviderConfig): ChatProvider {
   switch (config.provider) {
     case 'local':
       return new OpenAICompatProvider(
-        config.baseUrl || 'http://localhost:11434/v1',
+        config.baseUrl || 'http://127.0.0.1:8080/v1',
         undefined,
-        'nomic-embed-text'
+        localEmbeddingModel(config)
       )
     case 'openai':
       return new OpenAICompatProvider(
@@ -61,4 +61,12 @@ export function createProvider(config: ProviderConfig): ChatProvider {
     case 'gemini':
       return new GeminiProvider(config.apiKey ?? '')
   }
+}
+
+function localEmbeddingModel(config: ProviderConfig): string {
+  const baseUrl = config.baseUrl || 'http://127.0.0.1:8080/v1'
+  if (baseUrl.includes('127.0.0.1:8080') || baseUrl.includes('localhost:8080')) {
+    return config.model || 'gemma4-v2'
+  }
+  return 'nomic-embed-text'
 }

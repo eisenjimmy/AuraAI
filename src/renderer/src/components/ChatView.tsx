@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import type { AppSettings, ChatMessage, Persona, StreamEvent } from '@common/types'
+import type { AppSettings, ChatAttachment, ChatMessage, Persona, StreamEvent } from '@common/types'
 import { Avatar, UserAvatar } from './Avatar'
 import { Markdown } from './Markdown'
 import { SpeechQueue } from '../lib/voice'
-import { activityIcon, SendIcon, SpeakerIcon, StopIcon, WarnIcon } from './Icons'
+import { activityIcon, CloseIcon, ImageIcon, SendIcon, SpeakerIcon, StopIcon, WarnIcon } from './Icons'
 
 interface ChatViewProps {
   persona: Persona
@@ -78,18 +78,18 @@ export function ChatView({ persona, settings }: ChatViewProps): React.JSX.Elemen
   }, [])
 
   const send = useCallback(
-    (text: string) => {
+    (text: string, attachments: ChatAttachment[]) => {
       const trimmed = text.trim()
-      if (!trimmed || busy) return
+      if ((!trimmed && attachments.length === 0) || busy) return
       stickToBottom.current = true
       speechRef.current?.stop()
       setBusy(true)
       // Optimistic echo; authoritative copies stream back from main.
       setMessages(prev => [
         ...prev,
-        { id: `local-${Date.now()}`, role: 'user', content: trimmed, ts: Date.now() }
+        { id: `local-${Date.now()}`, role: 'user', content: trimmed, attachments, ts: Date.now() }
       ])
-      void window.aura.sendMessage({ personaId: persona.id, text: trimmed }).catch(() => setBusy(false))
+      void window.aura.sendMessage({ personaId: persona.id, text: trimmed, attachments }).catch(() => setBusy(false))
     },
     [busy, persona.id]
   )
@@ -223,6 +223,15 @@ function MessageRow({ message, prev, persona, userName }: MessageRowProps): Reac
           </div>
         )}
         <div className="msg-content">
+          {message.attachments && message.attachments.length > 0 && (
+            <div className="attachment-grid">
+              {message.attachments.map(a => (
+                <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="attachment-thumb" title={a.name}>
+                  <img src={a.url} alt={a.name} />
+                </a>
+              ))}
+            </div>
+          )}
           {message.content ? (
             <>
               <Markdown text={message.content} />
@@ -247,12 +256,13 @@ function MessageRow({ message, prev, persona, userName }: MessageRowProps): Reac
 interface ComposerProps {
   personaName: string
   busy: boolean
-  onSend: (text: string) => void
+  onSend: (text: string, attachments: ChatAttachment[]) => void
   onStop: () => void
 }
 
 function Composer({ personaName, busy, onSend, onStop }: ComposerProps): React.JSX.Element {
   const [text, setText] = useState('')
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const ref = useRef<HTMLTextAreaElement>(null)
 
   const autosize = useCallback(() => {
@@ -265,14 +275,37 @@ function Composer({ personaName, busy, onSend, onStop }: ComposerProps): React.J
   useEffect(autosize, [text, autosize])
 
   const submit = (): void => {
-    if (!text.trim() || busy) return
-    onSend(text)
+    if ((!text.trim() && attachments.length === 0) || busy) return
+    onSend(text, attachments)
     setText('')
+    setAttachments([])
+  }
+
+  const addImages = async (): Promise<void> => {
+    if (busy) return
+    const picked = await window.aura.pickChatImages()
+    if (picked.length) setAttachments(prev => [...prev, ...picked])
+  }
+
+  const removeAttachment = (id: string): void => {
+    setAttachments(prev => prev.filter(a => a.id !== id))
   }
 
   return (
     <div className="composer">
       <div className="composer-box">
+        {attachments.length > 0 && (
+          <div className="composer-attachments">
+            {attachments.map(a => (
+              <div key={a.id} className="composer-attachment" title={a.name}>
+                <img src={a.url} alt={a.name} />
+                <button onClick={() => removeAttachment(a.id)} title="Remove image">
+                  <CloseIcon size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <textarea
           ref={ref}
           rows={1}
@@ -286,17 +319,20 @@ function Composer({ personaName, busy, onSend, onStop }: ComposerProps): React.J
             }
           }}
         />
+        <button className="attach-btn" onClick={() => void addImages()} disabled={busy} title="Add images">
+          <ImageIcon />
+        </button>
         {busy ? (
           <button className="stop-btn" onClick={onStop} title="Stop generating">
             <StopIcon />
           </button>
         ) : (
-          <button className={`send-btn ${text.trim() ? 'ready' : ''}`} onClick={submit} title="Send">
+          <button className={`send-btn ${text.trim() || attachments.length ? 'ready' : ''}`} onClick={submit} title="Send">
             <SendIcon />
           </button>
         )}
       </div>
-      <div className="composer-hint">Enter to send · Shift+Enter for a new line</div>
+      <div className="composer-hint">Enter to send · Shift+Enter for a new line · Images are copied to your AuraAi documents folder</div>
     </div>
   )
 }

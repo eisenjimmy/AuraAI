@@ -1,25 +1,21 @@
 import type { Persona } from '@common/types'
-
-// Persona avatar: shows the uploaded image, or a blank colored circle with
-// the persona's initial until the user adds one (profile images are left
-// intentionally blank in the presets).
+import { PersonIcon } from './Icons'
+import { resolveAvatarSrc } from '../lib/avatarAssets'
 
 export function Avatar({ persona, size = 40 }: { persona: Persona; size?: number }): React.JSX.Element {
+  const src = resolveAvatarSrc(persona.avatar)
   const style: React.CSSProperties = {
     width: size,
     height: size,
-    fontSize: size * 0.42
-  }
-  if (persona.avatar) {
-    return (
-      <div className="avatar" style={style}>
-        <img src={persona.avatar} alt={persona.name} draggable={false} />
-      </div>
-    )
+    color: persona.color
   }
   return (
-    <div className="avatar" style={{ ...style, background: persona.color }}>
-      {persona.name.charAt(0).toUpperCase()}
+    <div className="avatar icon-avatar" style={style} aria-label={persona.name} title={persona.name}>
+      {src ? (
+        <img src={src} alt="" className="avatar-img" />
+      ) : (
+        <PersonIcon size={Math.max(16, Math.round(size * 0.52))} />
+      )}
     </div>
   )
 }
@@ -27,10 +23,12 @@ export function Avatar({ persona, size = 40 }: { persona: Persona; size?: number
 export function UserAvatar({ name, size = 40 }: { name: string; size?: number }): React.JSX.Element {
   return (
     <div
-      className="avatar"
-      style={{ width: size, height: size, fontSize: size * 0.42, background: '#6d6f78' }}
+      className="avatar icon-avatar"
+      style={{ width: size, height: size, color: '#9aa1ab' }}
+      aria-label={name || 'You'}
+      title={name || 'You'}
     >
-      {(name || 'You').charAt(0).toUpperCase()}
+      <PersonIcon size={Math.max(16, Math.round(size * 0.52))} />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import type { ChatProvider, ChatStreamOptions, ProviderEvent, ProviderMessage, ToolCall } from './types'
+import type { ChatProvider, ChatStreamOptions, ProviderContent, ProviderEvent, ProviderMessage, ToolCall } from './types'
 
 // One client for every OpenAI-compatible endpoint: Ollama (/v1), LM Studio,
 // llama.cpp server, and api.openai.com itself. Streaming via SSE.
@@ -25,11 +25,11 @@ export class OpenAICompatProvider implements ChatProvider {
     const messages: Record<string, unknown>[] = [{ role: 'system', content: opts.system }]
     for (const m of opts.messages) {
       if (m.role === 'tool') {
-        messages.push({ role: 'tool', tool_call_id: m.toolCallId, content: m.content })
+        messages.push({ role: 'tool', tool_call_id: m.toolCallId, content: textContent(m.content) })
       } else if (m.role === 'assistant' && m.toolCalls?.length) {
         messages.push({
           role: 'assistant',
-          content: m.content || null,
+          content: textContent(m.content) || null,
           tool_calls: m.toolCalls.map(c => ({
             id: c.id,
             type: 'function',
@@ -37,7 +37,7 @@ export class OpenAICompatProvider implements ChatProvider {
           }))
         })
       } else {
-        messages.push({ role: m.role, content: m.content })
+        messages.push({ role: m.role, content: openAIContent(m.content) })
       }
     }
 
@@ -180,4 +180,23 @@ export class OpenAICompatProvider implements ChatProvider {
       return { ok: false, message: err instanceof Error ? err.message : String(err) }
     }
   }
+}
+
+function textContent(content: ProviderContent): string {
+  if (typeof content === 'string') return content
+  return content
+    .filter(p => p.type === 'text')
+    .map(p => p.text)
+    .join('\n')
+}
+
+function openAIContent(content: ProviderContent): unknown {
+  if (typeof content === 'string') return content
+  return content.map(part => {
+    if (part.type === 'text') return { type: 'text', text: part.text }
+    return {
+      type: 'image_url',
+      image_url: { url: `data:${part.mimeType};base64,${part.data}` }
+    }
+  })
 }

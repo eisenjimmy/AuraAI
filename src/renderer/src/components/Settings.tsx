@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { AppSettings, Persona, ProviderId, ProviderPreset, VoiceSettings } from '@common/types'
 import { Avatar } from './Avatar'
-import { listVoices, normalizeForSpeech } from '../lib/voice'
+import { KOKORO_VOICES, SpeechQueue, normalizeForSpeech } from '../lib/voice'
+import { DEFAULT_AVATAR_CHOICES } from '../lib/avatarAssets'
 import { CloseIcon, PlayIcon } from './Icons'
 
 interface SettingsProps {
@@ -163,13 +164,17 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
   const [selectedId, setSelectedId] = useState(personas[0]?.id ?? '')
   const persona = personas.find(p => p.id === selectedId) ?? personas[0]
   const [draft, setDraft] = useState<Persona | null>(persona ?? null)
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([])
+  const [voiceStatus, setVoiceStatus] = useState('')
+  const previewSpeech = useRef<SpeechQueue | null>(null)
 
   useEffect(() => {
-    const load = (): void => setVoices(listVoices())
-    load()
-    window.speechSynthesis.addEventListener('voiceschanged', load)
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', load)
+    previewSpeech.current = new SpeechQueue((status, message) => {
+      if (status === 'loading') setVoiceStatus(message ?? 'Loading Kokoro...')
+      else if (status === 'speaking') setVoiceStatus('Playing preview.')
+      else if (status === 'error') setVoiceStatus(message ?? 'Voice preview failed.')
+      else setVoiceStatus('')
+    })
+    return () => previewSpeech.current?.stop()
   }, [])
 
   // Refresh the draft only when the selection changes — a background personas
@@ -186,15 +191,20 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
     setDraft(d => (d ? { ...d, voice: { ...d.voice, ...patch } } : d))
 
   const preview = (): void => {
-    window.speechSynthesis.cancel()
-    const u = new SpeechSynthesisUtterance(
-      normalizeForSpeech(`Hey! I'm ${draft.name}. ${draft.tagline}`)
-    )
-    u.rate = draft.voice.rate
-    u.pitch = draft.voice.pitch
-    const v = voices.find(x => x.name === draft.voice.voice)
-    if (v) u.voice = v
-    window.speechSynthesis.speak(u)
+    const q = previewSpeech.current
+    if (!q) return
+    q.stop()
+    q.setVoice({ ...draft.voice, voice: draft.voice.voice || 'af_heart' })
+    q.push(normalizeForSpeech(`Hey! I'm ${draft.name}. ${draft.tagline}`))
+    q.flush()
+  }
+
+  const chooseAvatar = (avatar: string): void =>
+    setDraft(d => (d ? { ...d, avatar } : d))
+
+  const uploadAvatar = async (): Promise<void> => {
+    const avatar = await window.aura.pickAvatar(draft.id)
+    if (avatar) chooseAvatar(avatar)
   }
 
   const save = async (): Promise<void> => {
@@ -207,11 +217,6 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
     const restored = await window.aura.resetPersona(draft.id)
     setDraft({ ...restored, voice: { ...restored.voice } })
     onPersonasChanged()
-  }
-
-  const pickAvatar = async (): Promise<void> => {
-    const avatar = await window.aura.pickAvatar(draft.id)
-    if (avatar) setDraft(d => (d ? { ...d, avatar } : d))
   }
 
   return (
@@ -234,15 +239,37 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
           <Avatar persona={draft} size={72} />
         </div>
         <div>
-          <button className="btn" onClick={() => void pickAvatar()}>Upload profile image…</button>
-          {draft.avatar && (
-            <button className="btn ghost" onClick={() => setDraft(d => (d ? { ...d, avatar: '' } : d))}>
-              Remove
+          <div className="p-name">{draft.name}</div>
+          <div className="hint" style={{ marginTop: 6 }}>
+            Default portraits can be restored at any time.
+          </div>
+        </div>
+      </div>
+
+      <div className="field">
+        <label>Profile image</label>
+        <div className="avatar-choice-grid">
+          {DEFAULT_AVATAR_CHOICES.map(choice => (
+            <button
+              key={choice.id}
+              className={`avatar-choice ${draft.avatar === choice.id ? 'selected' : ''}`}
+              onClick={() => chooseAvatar(choice.id)}
+              title={choice.label}
+            >
+              <img src={choice.src} alt="" />
+              <span>{choice.id === `default:${draft.id}` ? 'Original' : choice.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="row" style={{ marginTop: 8 }}>
+          {draft.builtIn && (
+            <button className="btn ghost" onClick={() => chooseAvatar(`default:${draft.id}`)}>
+              Use original
             </button>
           )}
-          <div className="hint" style={{ marginTop: 6 }}>
-            PNG, JPG, GIF or WebP. Shown at 40px in chat, like a Discord avatar.
-          </div>
+          <button className="btn" onClick={() => void uploadAvatar()}>
+            Upload image
+          </button>
         </div>
       </div>
 
@@ -275,17 +302,16 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
       </div>
 
       <div className="field">
-        <label>Voice</label>
+        <label>Kokoro voice</label>
         <div className="voice-preview">
           <select
             style={{ flex: 1 }}
-            value={draft.voice.voice}
+            value={draft.voice.voice || 'af_heart'}
             onChange={e => setVoice({ voice: e.target.value })}
           >
-            <option value="">System default</option>
-            {voices.map(v => (
-              <option key={v.name} value={v.name}>
-                {v.name} ({v.lang})
+            {KOKORO_VOICES.map(v => (
+              <option key={v.id} value={v.id}>
+                {v.label} ({v.gender}, {v.language})
               </option>
             ))}
           </select>
@@ -293,30 +319,18 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
             <PlayIcon /> Preview
           </button>
         </div>
+        {voiceStatus && <div className="hint" style={{ marginTop: 6 }}>{voiceStatus}</div>}
       </div>
-      <div className="row">
-        <div className="field">
-          <label>Rate ({draft.voice.rate.toFixed(2)})</label>
-          <input
-            type="range"
-            min={0.5}
-            max={1.6}
-            step={0.02}
-            value={draft.voice.rate}
-            onChange={e => setVoice({ rate: Number(e.target.value) })}
-          />
-        </div>
-        <div className="field">
-          <label>Pitch ({draft.voice.pitch.toFixed(2)})</label>
-          <input
-            type="range"
-            min={0.5}
-            max={1.6}
-            step={0.02}
-            value={draft.voice.pitch}
-            onChange={e => setVoice({ pitch: Number(e.target.value) })}
-          />
-        </div>
+      <div className="field">
+        <label>Speed ({draft.voice.rate.toFixed(2)})</label>
+        <input
+          type="range"
+          min={0.5}
+          max={1.6}
+          step={0.02}
+          value={draft.voice.rate}
+          onChange={e => setVoice({ rate: Number(e.target.value) })}
+        />
       </div>
 
       <div className="row">
@@ -345,6 +359,11 @@ function ChatTab({ settings, onSettingsSaved }: SettingsProps): React.JSX.Elemen
     update({ [key]: !draft[key] })
   }
 
+  const chooseImageFolder = async (): Promise<void> => {
+    const folder = await window.aura.chooseImageStorageFolder()
+    if (folder) update({ imageStoragePath: folder })
+  }
+
   return (
     <>
       <div className="row" style={{ marginBottom: 4 }}>
@@ -363,6 +382,15 @@ function ChatTab({ settings, onSettingsSaved }: SettingsProps): React.JSX.Elemen
       <div className="field">
         <label>About you</label>
         <textarea rows={2} value={draft.userBio} onChange={e => update({ userBio: e.target.value })} />
+      </div>
+
+      <div className="field">
+        <label>Image uploads folder</label>
+        <div className="path-row">
+          <input value={draft.imageStoragePath ?? ''} onChange={e => update({ imageStoragePath: e.target.value })} />
+          <button className="btn" onClick={() => void chooseImageFolder()}>Choose</button>
+        </div>
+        <div className="hint">Chat images are copied here before they are shown or sent to the model.</div>
       </div>
 
       <Toggle
@@ -390,31 +418,6 @@ function ChatTab({ settings, onSettingsSaved }: SettingsProps): React.JSX.Elemen
         onToggle={toggle('toolsMode')}
       />
 
-      <div style={{ marginTop: 16 }}>
-        <div className="field">
-          <label>Search provider</label>
-          <select
-            value={draft.searchProvider}
-            onChange={e => update({ searchProvider: e.target.value as AppSettings['searchProvider'] })}
-          >
-            <option value="auto">Auto (use key if set, else DuckDuckGo)</option>
-            <option value="duckduckgo">DuckDuckGo (no key)</option>
-            <option value="brave">Brave Search API</option>
-            <option value="tavily">Tavily</option>
-          </select>
-        </div>
-        {(draft.searchProvider === 'brave' || draft.searchProvider === 'tavily' || draft.searchProvider === 'auto') && (
-          <div className="field">
-            <label>Search API key (optional)</label>
-            <input
-              type="password"
-              placeholder="Improves search quality — brave.com/search/api or tavily.com"
-              value={draft.searchApiKey ?? ''}
-              onChange={e => update({ searchApiKey: e.target.value })}
-            />
-          </div>
-        )}
-      </div>
     </>
   )
 }

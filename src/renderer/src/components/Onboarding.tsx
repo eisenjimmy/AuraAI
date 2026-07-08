@@ -38,7 +38,7 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
     })
   }
 
-  // The wizard starts on Local — detect installed Ollama models right away.
+  // The wizard starts on Local — detect installed OpenAI-compatible models right away.
   useEffect(() => {
     if (draft.provider.provider === 'local' && draft.provider.baseUrl) {
       fetchLocalModels(draft.provider.baseUrl)
@@ -99,8 +99,8 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
             <h1>Welcome to Aura AI</h1>
             <p className="lede">
               Aura is a private AI chat companion that lives on your computer. Five friends with
-              five personalities, a memory that grows with every conversation, and awareness of
-              the world through web search. Your chats and memories stay on this machine.
+              five personalities and a memory that grows with every conversation. Your chats and
+              memories stay on this machine.
             </p>
             <p className="lede">Setup takes about a minute.</p>
             <div className="modal-footer" style={{ border: 'none', padding: '8px 0 0' }}>
@@ -134,7 +134,7 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
             <div style={{ marginTop: 18 }}>
               {preset?.id === 'local' && (
                 <div className="field">
-                  <label>Ollama URL</label>
+                  <label>Server URL</label>
                   <input
                     value={draft.provider.baseUrl ?? ''}
                     onChange={e => {
@@ -144,7 +144,7 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
                     onBlur={e => fetchLocalModels(e.target.value)}
                   />
                   <div className="hint">
-                    Install from ollama.com, then run: <code>ollama pull llama3.2</code>
+                    For Jarvis Gemma 4 12B v2, run: <code>npm run llm:gemma4-v2</code>
                   </div>
                 </div>
               )}
@@ -195,7 +195,7 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
                 ) : (
                   <input
                     value={draft.provider.model}
-                    placeholder="e.g. llama3.2"
+                    placeholder="e.g. gemma4-v2"
                     onChange={e =>
                       setDraft(d => ({ ...d, provider: { ...d.provider, model: e.target.value } }))
                     }

@@ -1,4 +1,4 @@
-import type { ChatProvider, ChatStreamOptions, ProviderEvent, ToolCall } from './types'
+import type { ChatProvider, ChatStreamOptions, ProviderContent, ProviderEvent, ToolCall } from './types'
 
 // Google Gemini via the REST generateContent API (SSE streaming).
 
@@ -20,14 +20,15 @@ export class GeminiProvider implements ChatProvider {
     for (const m of opts.messages) {
       if (m.role === 'tool') {
         let response: unknown
-        try { response = JSON.parse(m.content) } catch { response = { result: m.content } }
+        try { response = JSON.parse(textContent(m.content)) } catch { response = { result: textContent(m.content) } }
         contents.push({
           role: 'user',
           parts: [{ functionResponse: { name: m.name ?? 'tool', response } }]
         })
       } else if (m.role === 'assistant' && m.toolCalls?.length) {
         const parts: Record<string, unknown>[] = []
-        if (m.content) parts.push({ text: m.content })
+        const text = textContent(m.content)
+        if (text) parts.push({ text })
         for (const c of m.toolCalls) {
           let args: unknown = {}
           try { args = JSON.parse(c.args) } catch { /* keep {} */ }
@@ -35,7 +36,7 @@ export class GeminiProvider implements ChatProvider {
         }
         contents.push({ role: 'model', parts })
       } else {
-        contents.push({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })
+        contents.push({ role: m.role === 'assistant' ? 'model' : 'user', parts: geminiParts(m.content) })
       }
     }
 
@@ -148,4 +149,25 @@ export class GeminiProvider implements ChatProvider {
       return { ok: false, message: err instanceof Error ? err.message : String(err) }
     }
   }
+}
+
+function textContent(content: ProviderContent): string {
+  if (typeof content === 'string') return content
+  return content
+    .filter(p => p.type === 'text')
+    .map(p => p.text)
+    .join('\n')
+}
+
+function geminiParts(content: ProviderContent): Record<string, unknown>[] {
+  if (typeof content === 'string') return [{ text: content }]
+  return content.map(part => {
+    if (part.type === 'text') return { text: part.text }
+    return {
+      inlineData: {
+        mimeType: part.mimeType,
+        data: part.data
+      }
+    }
+  })
 }

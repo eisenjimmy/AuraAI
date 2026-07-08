@@ -1,7 +1,7 @@
 {
   "name": "aura-ai",
   "version": "1.0.0",
-  "description": "Aura AI — a local-first AI chat companion with five personas, persistent memory, and web awareness.",
+  "description": "Aura AI — a local-first AI chat companion with personas, image chat, persistent memory, and web awareness.",
   "main": "out/main/index.js",
   "license": "MIT",
   "author": "Aura AI contributors",
@@ -11,12 +11,14 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "start": "electron-vite preview",
+    "llm:gemma4-v2": "scripts/start-jarvis-gemma4-v2.sh",
     "dist": "electron-vite build && electron-builder",
     "dist:mac": "electron-vite build && electron-builder --mac",
     "dist:win": "electron-vite build && electron-builder --win"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.60.0"
+    "@anthropic-ai/sdk": "^0.60.0",
+    "kokoro-js": "^1.2.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
@@ -34,11 +36,14 @@
   "build": {
     "appId": "app.aura.chat",
     "productName": "Aura AI",
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release"
     },
     "files": [
-      "out/**/*"
+      "out/**/*",
+      "!**/._*",
+      "!**/.DS_Store"
     ],
     "mac": {
       "category": "public.app-category.productivity",

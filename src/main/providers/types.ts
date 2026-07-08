@@ -3,7 +3,7 @@
 
 export interface ProviderMessage {
   role: 'user' | 'assistant' | 'tool'
-  content: string
+  content: ProviderContent
   /** Set on assistant messages that requested tool calls. */
   toolCalls?: ToolCall[]
   /** Set on tool messages: which call this result answers. */
@@ -11,6 +11,12 @@ export interface ProviderMessage {
   /** Tool name (needed by Gemini function responses). */
   name?: string
 }
+
+export type ProviderContent = string | ProviderContentPart[]
+
+export type ProviderContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image'; mimeType: string; data: string; name?: string }
 
 export interface ToolCall {
   id: string

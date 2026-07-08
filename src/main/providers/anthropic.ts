@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { ChatProvider, ChatStreamOptions, ProviderEvent, ToolCall } from './types'
+import type { ChatProvider, ChatStreamOptions, ProviderContent, ProviderEvent, ToolCall } from './types'
 
 // Anthropic provider using the official SDK with streaming.
 // Note: newer Claude models reject sampling params (temperature/top_p),
@@ -27,7 +27,7 @@ export class AnthropicProvider implements ChatProvider {
         const block: Anthropic.ToolResultBlockParam = {
           type: 'tool_result',
           tool_use_id: m.toolCallId ?? '',
-          content: m.content
+          content: textContent(m.content)
         }
         const last = messages[messages.length - 1]
         if (last?.role === 'user' && Array.isArray(last.content) && last.content.every(b => b.type === 'tool_result')) {
@@ -37,7 +37,8 @@ export class AnthropicProvider implements ChatProvider {
         }
       } else if (m.role === 'assistant' && m.toolCalls?.length) {
         const blocks: Anthropic.ContentBlockParam[] = []
-        if (m.content) blocks.push({ type: 'text', text: m.content })
+        const text = textContent(m.content)
+        if (text) blocks.push({ type: 'text', text })
         for (const c of m.toolCalls) {
           let input: unknown = {}
           try { input = JSON.parse(c.args) } catch { /* keep {} */ }
@@ -45,7 +46,7 @@ export class AnthropicProvider implements ChatProvider {
         }
         messages.push({ role: 'assistant', content: blocks })
       } else {
-        messages.push({ role: m.role, content: m.content })
+        messages.push({ role: m.role, content: anthropicContent(m.content) })
       }
     }
 
@@ -105,4 +106,27 @@ export class AnthropicProvider implements ChatProvider {
       return { ok: false, message: err instanceof Error ? err.message : String(err) }
     }
   }
+}
+
+function textContent(content: ProviderContent): string {
+  if (typeof content === 'string') return content
+  return content
+    .filter(p => p.type === 'text')
+    .map(p => p.text)
+    .join('\n')
+}
+
+function anthropicContent(content: ProviderContent): string | Anthropic.ContentBlockParam[] {
+  if (typeof content === 'string') return content
+  return content.map(part => {
+    if (part.type === 'text') return { type: 'text', text: part.text }
+    return {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: part.mimeType,
+        data: part.data
+      }
+    } as Anthropic.ContentBlockParam
+  })
 }

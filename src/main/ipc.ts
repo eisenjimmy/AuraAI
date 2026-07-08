@@ -1,8 +1,9 @@
+import { randomUUID } from 'crypto'
 import { ipcMain, dialog, shell, BrowserWindow, app } from 'electron'
-import { copyFileSync, existsSync, mkdirSync } from 'fs'
-import { join, extname } from 'path'
-import type { AppSettings, Persona, ProviderConfig, SendMessageRequest, MemoryNote } from '@common/types'
-import { loadSettings, saveSettings, loadPersonas, savePersona, resetPersona, dataDir } from './store'
+import { copyFileSync, existsSync, mkdirSync, statSync } from 'fs'
+import { basename, join, extname } from 'path'
+import type { AppSettings, Persona, ProviderConfig, SendMessageRequest, MemoryNote, ChatAttachment } from '@common/types'
+import { loadSettings, saveSettings, loadPersonas, savePersona, resetPersona, dataDir, defaultImageStoragePath } from './store'
 import { loadChat, clearChat } from './chats'
 import { MemoryVault, defaultVaultPath } from './memory/vault'
 import { createProvider, PROVIDER_PRESETS } from './providers'
@@ -44,11 +45,56 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     return `aura-avatar://a/${encodeURIComponent(fileName)}?v=${Date.now()}`
   })
 
+  ipcMain.handle('images:pick', async (): Promise<ChatAttachment[]> => {
+    const win = getWindow()
+    if (!win) return []
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Add images',
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
+      properties: ['openFile', 'multiSelections']
+    })
+    if (result.canceled || result.filePaths.length === 0) return []
+
+    const settings = loadSettings()
+    const imageDir = settings.imageStoragePath || defaultImageStoragePath()
+    if (!existsSync(imageDir)) mkdirSync(imageDir, { recursive: true })
+
+    return result.filePaths.map(src => {
+      const ext = extname(src).toLowerCase()
+      const id = randomUUID()
+      const safeBase = basename(src, ext).replace(/[^a-z0-9._ -]/gi, '').slice(0, 80) || 'image'
+      const fileName = `${new Date().toISOString().replace(/[:.]/g, '-')}-${id}-${safeBase}${ext}`
+      const dest = join(imageDir, fileName)
+      copyFileSync(src, dest)
+      const stat = statSync(dest)
+      return {
+        id,
+        kind: 'image',
+        name: basename(src),
+        mimeType: mimeForExt(ext),
+        size: stat.size,
+        path: dest,
+        url: imageUrl(dest)
+      }
+    })
+  })
+
+  ipcMain.handle('images:chooseStorageFolder', async (): Promise<string | null> => {
+    const win = getWindow()
+    if (!win) return null
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Choose image storage folder',
+      properties: ['openDirectory', 'createDirectory']
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
+
   // ---------- chat ----------
   ipcMain.handle('chat:get', (_e, personaId: string) => loadChat(personaId))
   ipcMain.handle('chat:clear', (_e, personaId: string) => clearChat(personaId))
   ipcMain.handle('chat:send', async (_e, req: SendMessageRequest) => {
-    await pipeline.send(req.personaId, req.text)
+    await pipeline.send(req.personaId, req.text, req.attachments ?? [])
   })
   ipcMain.handle('chat:stop', (_e, personaId?: string) => pipeline.stop(personaId))
   ipcMain.handle('chat:active', () => pipeline.activePersonas())
@@ -80,4 +126,22 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   })
 
   ipcMain.handle('app:version', () => app.getVersion())
+}
+
+export function imageUrl(filePath: string): string {
+  return `aura-image://a/${encodeURIComponent(Buffer.from(filePath, 'utf8').toString('base64url'))}`
+}
+
+function mimeForExt(ext: string): string {
+  switch (ext.toLowerCase()) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg'
+    case '.webp':
+      return 'image/webp'
+    case '.gif':
+      return 'image/gif'
+    default:
+      return 'image/png'
+  }
 }

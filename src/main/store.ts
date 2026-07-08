@@ -14,6 +14,10 @@ export function dataDir(): string {
   return dir
 }
 
+export function defaultImageStoragePath(): string {
+  return join(app.getPath('documents'), 'AuraAi')
+}
+
 function readJson<T>(file: string, fallback: T): T {
   try {
     if (!existsSync(file)) return fallback
@@ -35,7 +39,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   onboarded: false,
   userName: '',
   userBio: '',
-  provider: { provider: 'local', model: '', baseUrl: 'http://localhost:11434/v1' },
+  provider: { provider: 'local', model: 'gemma4-v2', baseUrl: 'http://127.0.0.1:8080/v1' },
   activePersonaId: 'nova',
   theme: 'dark',
   voiceEnabled: false,
@@ -46,7 +50,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
 }
 
 export function loadSettings(): AppSettings {
-  return readJson(join(dataDir(), 'config.json'), DEFAULT_SETTINGS)
+  const settings = readJson(join(dataDir(), 'config.json'), DEFAULT_SETTINGS)
+  return {
+    ...settings,
+    imageStoragePath: settings.imageStoragePath || defaultImageStoragePath()
+  }
 }
 
 export function saveSettings(settings: AppSettings): void {
@@ -67,7 +75,20 @@ function personasFile(): string {
 
 export function loadPersonas(): Persona[] {
   const overrides = readJson<PersonaOverrides>(personasFile(), {})
-  const merged = DEFAULT_PERSONAS.map(p => ({ ...p, ...(overrides[p.id] ?? {}), id: p.id, builtIn: true }))
+  const merged = DEFAULT_PERSONAS.map(p => {
+    const override = overrides[p.id] ?? {}
+    const voice = override.voice
+      ? { ...p.voice, ...override.voice, voice: override.voice.voice || p.voice.voice }
+      : p.voice
+    return {
+      ...p,
+      ...override,
+      avatar: override.avatar || p.avatar,
+      voice,
+      id: p.id,
+      builtIn: true
+    }
+  })
   // Custom personas the user created from scratch.
   for (const [id, o] of Object.entries(overrides)) {
     if (!DEFAULT_PERSONAS.some(p => p.id === id) && o.name && o.prompt) {
@@ -78,7 +99,7 @@ export function loadPersonas(): Persona[] {
         color: o.color ?? '#7a8290',
         prompt: o.prompt,
         avatar: o.avatar ?? '',
-        voice: o.voice ?? { voice: '', rate: 1, pitch: 1 },
+        voice: o.voice ?? { voice: 'af_heart', rate: 1, pitch: 1 },
         builtIn: false
       })
     }

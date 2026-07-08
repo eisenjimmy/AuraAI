@@ -1,6 +1,7 @@
 ﻿import { randomUUID } from 'crypto'
+import { readFileSync } from 'fs'
 import type { AppSettings, ChatMessage, Persona, StreamEvent, ActivityEvent, MemoryNote } from '@common/types'
-import type { ChatProvider, ProviderMessage } from '../providers/types'
+import type { ChatProvider, ProviderContentPart, ProviderMessage } from '../providers/types'
 import { createProvider } from '../providers'
 import { MemoryVault, defaultVaultPath } from '../memory/vault'
 import { extractMemory } from '../memory/extractor'
@@ -45,7 +46,7 @@ export class ChatPipeline {
     return new MemoryVault(settings.memoryVaultPath || defaultVaultPath())
   }
 
-  async send(personaId: string, text: string): Promise<void> {
+  async send(personaId: string, text: string, attachments = [] as ChatMessage['attachments']): Promise<void> {
     const settings = this.getSettings()
     const persona = this.getPersona(personaId)
     if (!persona) throw new Error(`Unknown persona: ${personaId}`)
@@ -57,6 +58,7 @@ export class ChatPipeline {
       id: randomUUID(),
       role: 'user',
       content: text,
+      attachments,
       ts: Date.now()
     }
     appendMessage(personaId, userMsg)
@@ -115,7 +117,7 @@ export class ChatPipeline {
 
       // 3. Build prompt + history.
       const system = buildSystemPrompt(persona, settings, memories, searchResults)
-      const history = buildHistory(personaId, reply.id)
+      const history = buildHistory(personaId, reply.id, userMsg.id)
 
       // 4. Stream the reply.
       const onText = (chunk: string): void => {
@@ -201,21 +203,49 @@ export class ChatPipeline {
   }
 }
 
-function buildHistory(personaId: string, excludeMessageId: string): ProviderMessage[] {
-  const all = loadChat(personaId).filter(m => m.id !== excludeMessageId && !m.error && m.content)
+function buildHistory(personaId: string, excludeMessageId: string, imageMessageId: string): ProviderMessage[] {
+  const all = loadChat(personaId).filter(m => m.id !== excludeMessageId && !m.error && (m.content || m.attachments?.length))
   const recent = all.slice(-HISTORY_MESSAGES)
   // Trim to a character budget, keeping the newest messages.
   let total = 0
   const kept: ProviderMessage[] = []
   for (let i = recent.length - 1; i >= 0; i--) {
-    total += recent[i].content.length
+    total += recent[i].content.length + ((recent[i].attachments?.length ?? 0) * 120)
     if (total > HISTORY_CHAR_BUDGET && kept.length > 0) break
-    kept.unshift({ role: recent[i].role, content: recent[i].content })
+    kept.unshift({
+      role: recent[i].role,
+      content: messageContent(recent[i], recent[i].id === imageMessageId)
+    })
   }
   // Anthropic (and some others) require the history to start with a user
   // turn — trimming can leave an assistant message first, so drop leaders.
   while (kept.length > 0 && kept[0].role !== 'user') kept.shift()
   return kept
+}
+
+function messageContent(message: ChatMessage, includeImageBytes: boolean): string | ProviderContentPart[] {
+  const attachments = message.attachments ?? []
+  if (attachments.length === 0) return message.content
+  if (!includeImageBytes) {
+    const names = attachments.map(a => a.name).join(', ')
+    return `${message.content}\n\n[Attached image${attachments.length === 1 ? '' : 's'}: ${names}]`.trim()
+  }
+
+  const parts: ProviderContentPart[] = []
+  if (message.content.trim()) parts.push({ type: 'text', text: message.content })
+  for (const attachment of attachments) {
+    try {
+      parts.push({
+        type: 'image',
+        mimeType: attachment.mimeType,
+        data: readFileSync(attachment.path).toString('base64'),
+        name: attachment.name
+      })
+    } catch {
+      parts.push({ type: 'text', text: `[Image unavailable: ${attachment.name}]` })
+    }
+  }
+  return parts
 }
 
 function humanizeProviderError(err: unknown, settings: AppSettings): string {

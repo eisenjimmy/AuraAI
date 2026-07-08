@@ -7,7 +7,7 @@ export type ProviderId = 'local' | 'anthropic' | 'openai' | 'gemini'
 export interface ProviderConfig {
   /** Which provider backs the chat. */
   provider: ProviderId
-  /** Model id, e.g. "llama3.2", "claude-opus-4-8", "gpt-4o", "gemini-2.0-flash" */
+  /** Model id, e.g. "gemma4-v2", "claude-opus-4-8", "gpt-4o", "gemini-2.0-flash" */
   model: string
   /** API key for cloud providers (unused for local). */
   apiKey?: string
@@ -53,10 +53,21 @@ export interface Persona {
 
 export type Role = 'user' | 'assistant'
 
+export interface ChatAttachment {
+  id: string
+  kind: 'image'
+  name: string
+  mimeType: string
+  size: number
+  path: string
+  url: string
+}
+
 export interface ChatMessage {
   id: string
   role: Role
   content: string
+  attachments?: ChatAttachment[]
   /** Unix ms. */
   ts: number
   /** Persona that authored an assistant message. */
@@ -113,6 +124,8 @@ export interface AppSettings {
   memoryEnabled: boolean
   /** Folder holding the markdown memory vault; empty = default app folder. */
   memoryVaultPath?: string
+  /** Folder where chat image uploads are copied. Empty = Documents/AuraAi. */
+  imageStoragePath?: string
   /** Advanced: model-driven tool loop. Off by default. */
   toolsMode: boolean
 }
@@ -122,6 +135,7 @@ export interface AppSettings {
 export interface SendMessageRequest {
   personaId: string
   text: string
+  attachments?: ChatAttachment[]
 }
 
 export type StreamEvent =
@@ -148,6 +162,8 @@ export interface AuraApi {
   savePersona(persona: Persona): Promise<void>
   resetPersona(id: string): Promise<Persona>
   pickAvatar(personaId: string): Promise<string | null>
+  pickChatImages(): Promise<ChatAttachment[]>
+  chooseImageStorageFolder(): Promise<string | null>
 
   getChat(personaId: string): Promise<ChatMessage[]>
   clearChat(personaId: string): Promise<void>

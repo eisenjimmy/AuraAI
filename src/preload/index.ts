@@ -8,6 +8,8 @@ const api: AuraApi = {
   savePersona: persona => ipcRenderer.invoke('personas:save', persona),
   resetPersona: id => ipcRenderer.invoke('personas:reset', id),
   pickAvatar: personaId => ipcRenderer.invoke('personas:pickAvatar', personaId),
+  pickChatImages: () => ipcRenderer.invoke('images:pick'),
+  chooseImageStorageFolder: () => ipcRenderer.invoke('images:chooseStorageFolder'),
 
   getChat: personaId => ipcRenderer.invoke('chat:get', personaId),
   clearChat: personaId => ipcRenderer.invoke('chat:clear', personaId),

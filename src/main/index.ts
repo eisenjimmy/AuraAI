@@ -1,6 +1,6 @@
 import { app, BrowserWindow, protocol, net, shell } from 'electron'
 import { existsSync } from 'fs'
-import { join } from 'path'
+import { extname, join } from 'path'
 import { pathToFileURL } from 'url'
 import { registerIpc } from './ipc'
 import { dataDir } from './store'
@@ -22,7 +22,8 @@ if (!app.requestSingleInstanceLock()) {
 // Serve user-uploaded persona avatars from the app data folder via a
 // dedicated scheme so the renderer never needs file:// access.
 protocol.registerSchemesAsPrivileged([
-  { scheme: 'aura-avatar', privileges: { standard: false, secure: true, supportFetchAPI: true } }
+  { scheme: 'aura-avatar', privileges: { standard: false, secure: true, supportFetchAPI: true } },
+  { scheme: 'aura-image', privileges: { standard: false, secure: true, supportFetchAPI: true } }
 ])
 
 const DEV_URL = !app.isPackaged ? process.env['ELECTRON_RENDERER_URL'] : undefined
@@ -77,6 +78,18 @@ app.whenReady().then(() => {
     const name = decodeURIComponent(url.pathname.replace(/^\//, ''))
     const clean = name.replace(/[^a-z0-9._ -]/gi, '').replace(/\.\./g, '')
     const file = join(dataDir(), 'avatars', clean)
+    return net.fetch(pathToFileURL(file).toString())
+  })
+
+  protocol.handle('aura-image', request => {
+    // aura-image://a/<base64url absolute path>
+    const url = new URL(request.url)
+    const encoded = url.pathname.replace(/^\//, '')
+    const file = Buffer.from(decodeURIComponent(encoded), 'base64url').toString('utf8')
+    const ext = extname(file).toLowerCase()
+    if (!['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(ext)) {
+      return new Response('Unsupported image type', { status: 415 })
+    }
     return net.fetch(pathToFileURL(file).toString())
   })
 

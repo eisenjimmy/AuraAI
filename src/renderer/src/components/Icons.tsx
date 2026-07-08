@@ -95,10 +95,25 @@ export const PlayIcon = ({ size = 12 }: IconProps): React.JSX.Element => (
   </svg>
 )
 
+export const ImageIcon = ({ size = 14 }: IconProps): React.JSX.Element => (
+  <svg {...base(size)}>
+    <rect x="2.2" y="3" width="11.6" height="10" rx="1.4" />
+    <circle cx="5.6" cy="6.2" r="1" />
+    <path d="M3.5 11.6 6.6 8.5l2.1 2.1 1.3-1.3 2.5 2.3" />
+  </svg>
+)
+
 export const WarnIcon = ({ size = 12 }: IconProps): React.JSX.Element => (
   <svg {...base(size)}>
     <path d="M8 2.2 14.5 13.5h-13L8 2.2Z" />
     <path d="M8 6.5v3.2M8 11.6v.2" />
+  </svg>
+)
+
+export const PersonIcon = ({ size = 16, className }: IconProps): React.JSX.Element => (
+  <svg {...base(size)} className={className}>
+    <circle cx="8" cy="5.4" r="2.2" />
+    <path d="M3.8 13.2c.8-2.4 2.2-3.6 4.2-3.6s3.4 1.2 4.2 3.6" />
   </svg>
 )
 
