@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, renam
 import { join } from 'path'
 import type { AppSettings, Persona } from '@common/types'
 import { DEFAULT_PERSONAS } from '@common/personas'
+import { IS_KOREAN_EDITION } from '@common/edition'
 
 // Tiny JSON-file persistence. Everything Aura stores is a plain file the
 // user can read: config.json, personas.json, chats/*.json and the markdown
@@ -15,7 +16,7 @@ export function dataDir(): string {
 }
 
 export function defaultImageStoragePath(): string {
-  return join(app.getPath('documents'), 'AuraAi')
+  return join(app.getPath('documents'), IS_KOREAN_EDITION ? 'AuraAiKR' : 'AuraAi')
 }
 
 function readJson<T>(file: string, fallback: T): T {

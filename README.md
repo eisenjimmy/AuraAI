@@ -4,6 +4,8 @@
 
 **A private desktop AI companion with personalities, memory, images, and local LLM support.**
 
+**Language:** English · [한국어](README.ko.md)
+
 [![Electron](https://img.shields.io/badge/Electron-33-2b2e3a?logo=electron)](https://www.electronjs.org/)
 [![React](https://img.shields.io/badge/React-18-087ea4?logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript)](https://www.typescriptlang.org/)
@@ -14,7 +16,9 @@
 
 **Talk to seven distinct AI companions. Keep your memories in plain files. Attach images. Run local when you want privacy.**
 
-[Quick Start](#quick-start) · [Meet The Personas](#meet-the-personas) · [Image Chat](#image-chat) · [Local LLM Setup](#local-llm-setup) · [For Code Agents](#code-agent-handoff-prompt)
+**Editions:** Aura AI ships from one repository as an English edition and a Korean edition. The Korean build has Korean UI text, Korean persona names, Korean system prompts, and separate Korean default portraits.
+
+[Quick Start](#quick-start) · [Editions](#editions) · [Meet The Personas](#meet-the-personas) · [Image Chat](#image-chat) · [Local LLM Setup](#local-llm-setup) · [For Code Agents](#code-agent-handoff-prompt)
 
 </div>
 
@@ -57,6 +61,26 @@ npm run dev
 ```
 
 Aura opens a first-run setup flow. Pick a provider, enter your name, choose a persona, and start chatting.
+
+## Editions
+
+Aura keeps one codebase and builds two desktop editions:
+
+| Edition | App name | UI | Persona defaults | Data folder |
+|---|---|---|---|---|
+| English | Aura AI | English | Nova, Sage, Rio, Luna, Max, Gilleon, Neir | Aura AI |
+| Korean | Aura AI Korean / 아우라 AI | Korean | 하나, 서윤, 재민, 은별, 민준, 길온, 나이르 | Aura AI Korean |
+
+Build commands:
+
+```bash
+npm run dist:en:mac
+npm run dist:en:win
+npm run dist:ko:mac
+npm run dist:ko:win
+```
+
+The English edition is the default when no `AURA_EDITION` flag is set.
 
 ## Local LLM Setup
 
@@ -101,6 +125,20 @@ Each persona is editable. You can change the name, tagline, system prompt, accen
 | **Neir** | <img src="src/renderer/src/assets/avatars/neir.png" width="88" alt="Neir portrait"> | Minimalist designer and visionary: calm, exacting, taste-driven. |
 
 Aura also ships ten additional profile images to choose from, plus user uploads.
+
+## Korean Edition Personas
+
+The Korean edition keeps the same internal persona IDs but presents Korean names, Korean prompts, and Korean default portraits.
+
+| Persona | Portrait | Personality |
+|---|---:|---|
+| **하나** | <img src="src/renderer/src/assets/avatars/nova-ko.png" width="88" alt="하나 portrait"> | Bright, playful, warm Korean hype-friend energy. |
+| **서윤** | <img src="src/renderer/src/assets/avatars/sage-ko.png" width="88" alt="서윤 portrait"> | Calm former-teacher presence, careful questions, no judgment. |
+| **재민** | <img src="src/renderer/src/assets/avatars/rio-ko.png" width="88" alt="재민 portrait"> | Korean banter, quick wit, useful after the joke lands. |
+| **은별** | <img src="src/renderer/src/assets/avatars/luna-ko.png" width="88" alt="은별 portrait"> | Quiet Hongdae night-owl artist, soft emotional read. |
+| **민준** | <img src="src/renderer/src/assets/avatars/max-ko.png" width="88" alt="민준 portrait"> | Practical shop-owner directness, dry humor, loyal help. |
+| **길온** | <img src="src/renderer/src/assets/avatars/gilleon-ko.png" width="88" alt="길온 portrait"> | Inventor-founder parody energy: sharp, technical, fast. |
+| **나이르** | <img src="src/renderer/src/assets/avatars/neir-ko.png" width="88" alt="나이르 portrait"> | White-haired minimalist Korean designer and product visionary. |
 
 ## Image Chat
 
@@ -192,6 +230,15 @@ npm run typecheck
 npm run build
 npm run dist:mac
 npm run dist:win
+```
+
+For explicit edition builds:
+
+```bash
+npm run dist:en:mac
+npm run dist:en:win
+npm run dist:ko:mac
+npm run dist:ko:win
 ```
 
 Generated installers are written to:

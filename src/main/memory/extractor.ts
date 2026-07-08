@@ -1,6 +1,7 @@
 import type { ChatProvider } from '../providers/types'
 import type { MemoryNote } from '@common/types'
 import { MemoryVault, slugify, clampImportance } from './vault'
+import { IS_KOREAN_EDITION } from '@common/edition'
 
 // Automatic memory extraction: after an exchange, quietly ask the model
 // whether anything durable about the *user* was revealed, and file it as a
@@ -28,6 +29,27 @@ Assistant ({PERSONA}): {ASSISTANT}
 Return ONLY one compact JSON object, no prose. Example:
 {"remember": true, "title": "Favorite coffee", "type": "preference", "content": "Prefers dark roast coffee in the morning.", "importance": 3, "updates": null, "links": ["morning-routine"]}`
 
+const EXTRACTION_PROMPT_KO = `당신은 개인 AI 컴패니언의 기억 관리자입니다. 아래 대화 한 턴을 분석해 장기적으로 기억할 가치가 있는 사용자 관련 사실을 최대 하나만 추출하세요.
+
+허용 타입: preference, profile, relationship, event, goal, fact.
+
+규칙:
+- 이름, 직업, 주변 사람, 취향, 진행 중인 프로젝트, 중요한 날짜처럼 구체적이고 앞으로의 대화에 유용한 사실만 추출하세요.
+- 지시사항, 임시 작업, 잡담, 일반 상식은 추출하지 마세요.
+- 노트 내용은 사용자를 3인칭으로 설명하세요. 예: "지미는 아침에 진한 커피를 선호한다."
+- 아래 기존 기억이 같은 사실을 이미 다루면 "updates"에 기존 slug를 넣어 중복 대신 업데이트하게 하세요.
+- 추출할 것이 없으면 정확히 {"remember": false}만 답하세요.
+- title과 content는 자연스러운 한국어로 쓰세요. type은 위 영어 타입 중 하나를 쓰세요.
+
+기존 기억 slug: {SLUGS}
+
+대화:
+사용자: {USER}
+어시스턴트 ({PERSONA}): {ASSISTANT}
+
+간결한 JSON 객체 하나만 반환하세요. 설명 금지. 예:
+{"remember": true, "title": "커피 취향", "type": "preference", "content": "아침에는 진한 커피를 선호한다.", "importance": 3, "updates": null, "links": ["morning-routine"]}`
+
 export interface ExtractionResult {
   saved: boolean
   note?: MemoryNote
@@ -48,7 +70,7 @@ export async function extractMemory(
     const slugs = vault.list().map(n => n.slug).slice(0, 80)
     // Function replacements: plain .replace(str, str) would interpret $-patterns
     // ($&, $', ...) inside user text and corrupt the prompt.
-    const prompt = EXTRACTION_PROMPT
+    const prompt = (IS_KOREAN_EDITION ? EXTRACTION_PROMPT_KO : EXTRACTION_PROMPT)
       .replace('{SLUGS}', () => (slugs.length ? slugs.join(', ') : '(none yet)'))
       .replace('{USER}', () => userMessage.slice(0, 2000))
       .replace('{PERSONA}', () => personaName)
@@ -57,7 +79,7 @@ export async function extractMemory(
     let raw = ''
     for await (const ev of provider.streamChat({
       model,
-      system: 'You extract memory notes. Output only JSON.',
+      system: IS_KOREAN_EDITION ? '기억 노트를 추출합니다. JSON만 출력하세요.' : 'You extract memory notes. Output only JSON.',
       messages: [{ role: 'user', content: prompt }],
       maxTokens: 300
     })) {

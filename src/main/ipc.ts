@@ -9,6 +9,21 @@ import { MemoryVault, defaultVaultPath } from './memory/vault'
 import { createProvider, PROVIDER_PRESETS } from './providers'
 import { OpenAICompatProvider } from './providers/openaiCompat'
 import { ChatPipeline } from './agent/pipeline'
+import { IS_KOREAN_EDITION } from '@common/edition'
+
+const uiText = IS_KOREAN_EDITION
+  ? {
+      chooseProfileImage: '프로필 이미지 선택',
+      addImages: '이미지 추가',
+      imageFilter: '이미지',
+      chooseImageFolder: '이미지 저장 폴더 선택'
+    }
+  : {
+      chooseProfileImage: 'Choose a profile image',
+      addImages: 'Add images',
+      imageFilter: 'Images',
+      chooseImageFolder: 'Choose image storage folder'
+    }
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
   const pipeline = new ChatPipeline(
@@ -31,8 +46,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const win = getWindow()
     if (!win) return null
     const result = await dialog.showOpenDialog(win, {
-      title: 'Choose a profile image',
-      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
+      title: uiText.chooseProfileImage,
+      filters: [{ name: uiText.imageFilter, extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
       properties: ['openFile']
     })
     if (result.canceled || result.filePaths.length === 0) return null
@@ -49,8 +64,8 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const win = getWindow()
     if (!win) return []
     const result = await dialog.showOpenDialog(win, {
-      title: 'Add images',
-      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
+      title: uiText.addImages,
+      filters: [{ name: uiText.imageFilter, extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }],
       properties: ['openFile', 'multiSelections']
     })
     if (result.canceled || result.filePaths.length === 0) return []
@@ -83,7 +98,7 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     const win = getWindow()
     if (!win) return null
     const result = await dialog.showOpenDialog(win, {
-      title: 'Choose image storage folder',
+      title: uiText.chooseImageFolder,
       properties: ['openDirectory', 'createDirectory']
     })
     if (result.canceled || result.filePaths.length === 0) return null

@@ -9,6 +9,7 @@ import { webSearch, shouldSearch } from '../search/webSearch'
 import { buildSystemPrompt } from './prompt'
 import { runToolLoop } from './tools'
 import { loadChat, appendMessage, updateMessage } from '../chats'
+import { IS_KOREAN_EDITION } from '@common/edition'
 
 // The conversation pipeline. Default mode is deterministic host code
 // (the original Jarvis design goal): recall memories, maybe search, build
@@ -94,7 +95,9 @@ export class ChatPipeline {
         if (memories.length > 0) {
           pushActivity({
             kind: 'memory-recall',
-            label: memories.length === 1 ? 'Remembered 1 thing' : `Remembered ${memories.length} things`,
+            label: IS_KOREAN_EDITION
+              ? `기억 ${memories.length}개를 떠올림`
+              : memories.length === 1 ? 'Remembered 1 thing' : `Remembered ${memories.length} things`,
             detail: memories.map(m => m.title).join(', ')
           })
         }
@@ -104,12 +107,12 @@ export class ChatPipeline {
       // where the model calls web_search itself.
       let searchResults = null
       if (!settings.toolsMode && settings.webSearchEnabled && shouldSearch(text)) {
-        pushActivity({ kind: 'search', label: 'Searching the web...' })
+        pushActivity({ kind: 'search', label: IS_KOREAN_EDITION ? '웹 검색 중...' : 'Searching the web...' })
         searchResults = await webSearch(text, settings, 5).catch(() => null)
         if (searchResults && searchResults.length > 0) {
           pushActivity({
             kind: 'search',
-            label: `Found ${searchResults.length} results`,
+            label: IS_KOREAN_EDITION ? `검색 결과 ${searchResults.length}개 발견` : `Found ${searchResults.length} results`,
             detail: searchResults.map(r => r.title).join(' | ')
           })
         }
@@ -167,7 +170,7 @@ export class ChatPipeline {
       if (aborted) {
         this.emit({ type: 'done', personaId, messageId: reply.id, content: reply.content })
       } else {
-        this.emit({ type: 'error', personaId, messageId: reply.id, message: reply.error ?? 'Unknown error', content: reply.content })
+        this.emit({ type: 'error', personaId, messageId: reply.id, message: reply.error ?? (IS_KOREAN_EDITION ? '알 수 없는 오류' : 'Unknown error'), content: reply.content })
       }
     } finally {
       if (this.active.get(personaId) === controller) this.active.delete(personaId)
@@ -194,7 +197,10 @@ export class ChatPipeline {
         reply.content
       )
       if (result.saved && result.note) {
-        const event: ActivityEvent = { kind: 'memory-save', label: `Remembered: ${result.note.title}` }
+        const event: ActivityEvent = {
+          kind: 'memory-save',
+          label: IS_KOREAN_EDITION ? `기억함: ${result.note.title}` : `Remembered: ${result.note.title}`
+        }
         reply.activity = [...(reply.activity ?? []), event]
         updateMessage(personaId, reply)
         this.emit({ type: 'activity', personaId, messageId: reply.id, event })
@@ -228,7 +234,9 @@ function messageContent(message: ChatMessage, includeImageBytes: boolean): strin
   if (attachments.length === 0) return message.content
   if (!includeImageBytes) {
     const names = attachments.map(a => a.name).join(', ')
-    return `${message.content}\n\n[Attached image${attachments.length === 1 ? '' : 's'}: ${names}]`.trim()
+    return IS_KOREAN_EDITION
+      ? `${message.content}\n\n[첨부 이미지: ${names}]`.trim()
+      : `${message.content}\n\n[Attached image${attachments.length === 1 ? '' : 's'}: ${names}]`.trim()
   }
 
   const parts: ProviderContentPart[] = []
@@ -242,7 +250,7 @@ function messageContent(message: ChatMessage, includeImageBytes: boolean): strin
         name: attachment.name
       })
     } catch {
-      parts.push({ type: 'text', text: `[Image unavailable: ${attachment.name}]` })
+      parts.push({ type: 'text', text: IS_KOREAN_EDITION ? `[이미지를 불러올 수 없음: ${attachment.name}]` : `[Image unavailable: ${attachment.name}]` })
     }
   }
   return parts
@@ -254,18 +262,28 @@ function humanizeProviderError(err: unknown, settings: AppSettings): string {
   const lower = raw.toLowerCase()
   if (lower.includes('fetch failed') || lower.includes('econnrefused') || lower.includes('enotfound') || lower.includes('network')) {
     if (provider === 'local') {
-      return `Can't reach the local AI server at ${settings.provider.baseUrl || 'localhost'}. Is Ollama (or your server) running?`
+      return IS_KOREAN_EDITION
+        ? `로컬 AI 서버(${settings.provider.baseUrl || 'localhost'})에 연결할 수 없습니다. Ollama 또는 사용 중인 서버가 실행 중인가요?`
+        : `Can't reach the local AI server at ${settings.provider.baseUrl || 'localhost'}. Is Ollama (or your server) running?`
     }
-    return `Can't reach the ${provider} API. Check your internet connection.`
+    return IS_KOREAN_EDITION
+      ? `${provider} API에 연결할 수 없습니다. 인터넷 연결을 확인하세요.`
+      : `Can't reach the ${provider} API. Check your internet connection.`
   }
   if (lower.includes('401') || lower.includes('403') || lower.includes('authentication') || lower.includes('invalid x-api-key') || lower.includes('api key')) {
-    return `The ${provider} API rejected your key. Check it in Settings → AI Provider. (${raw.slice(0, 140)})`
+    return IS_KOREAN_EDITION
+      ? `${provider} API가 키를 거부했습니다. 설정 → AI 제공자에서 확인하세요. (${raw.slice(0, 140)})`
+      : `The ${provider} API rejected your key. Check it in Settings → AI Provider. (${raw.slice(0, 140)})`
   }
   if (lower.includes('404') && provider === 'local') {
-    return `Model "${settings.provider.model}" not found on the local server. Pull it first (e.g. "ollama pull ${settings.provider.model}").`
+    return IS_KOREAN_EDITION
+      ? `로컬 서버에서 "${settings.provider.model}" 모델을 찾을 수 없습니다. 먼저 모델을 받아오세요. 예: "ollama pull ${settings.provider.model}"`
+      : `Model "${settings.provider.model}" not found on the local server. Pull it first (e.g. "ollama pull ${settings.provider.model}").`
   }
   if (lower.includes('429')) {
-    return `Rate limited by the ${provider} API — give it a moment and try again.`
+    return IS_KOREAN_EDITION
+      ? `${provider} API 사용량 제한에 걸렸습니다. 잠시 후 다시 시도하세요.`
+      : `Rate limited by the ${provider} API — give it a moment and try again.`
   }
   return raw.length > 300 ? raw.slice(0, 300) + '…' : raw
 }

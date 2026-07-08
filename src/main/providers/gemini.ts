@@ -1,4 +1,5 @@
 import type { ChatProvider, ChatStreamOptions, ProviderContent, ProviderEvent, ToolCall } from './types'
+import { IS_KOREAN_EDITION } from '@common/edition'
 
 // Google Gemini via the REST generateContent API (SSE streaming).
 
@@ -65,7 +66,7 @@ export class GeminiProvider implements ChatProvider {
       signal: opts.signal
     })
     if (!res.ok || !res.body) {
-      throw new Error(`Gemini request failed (${res.status}): ${(await res.text()).slice(0, 300)}`)
+      throw new Error(`${IS_KOREAN_EDITION ? 'Gemini 요청 실패' : 'Gemini request failed'} (${res.status}): ${(await res.text()).slice(0, 300)}`)
     }
 
     const calls: ToolCall[] = []
@@ -98,7 +99,7 @@ export class GeminiProvider implements ChatProvider {
         const { done, value } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
-        if (buffer.length > 4_000_000) throw new Error('Streaming response exceeded buffer limit')
+        if (buffer.length > 4_000_000) throw new Error(IS_KOREAN_EDITION ? '스트리밍 응답이 버퍼 한도를 초과했습니다' : 'Streaming response exceeded buffer limit')
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
         for (const line of lines) {
@@ -139,12 +140,12 @@ export class GeminiProvider implements ChatProvider {
       const res = await fetch(`${BASE}/models?pageSize=50`, {
         headers: { 'x-goog-api-key': this.apiKey }
       })
-      if (!res.ok) return { ok: false, message: `Gemini API returned ${res.status}` }
+      if (!res.ok) return { ok: false, message: IS_KOREAN_EDITION ? `Gemini API 응답 오류 ${res.status}` : `Gemini API returned ${res.status}` }
       const json: any = await res.json()
       const models = (json.models ?? [])
         .map((m: any) => String(m.name).replace(/^models\//, ''))
         .filter((n: string) => n.startsWith('gemini'))
-      return { ok: true, message: 'Connected.', models: models.length ? models : GEMINI_MODELS }
+      return { ok: true, message: IS_KOREAN_EDITION ? '연결됨.' : 'Connected.', models: models.length ? models : GEMINI_MODELS }
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) }
     }

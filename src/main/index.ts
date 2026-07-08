@@ -4,8 +4,11 @@ import { extname, join } from 'path'
 import { pathToFileURL } from 'url'
 import { registerIpc } from './ipc'
 import { dataDir } from './store'
+import { APP_NAME, APP_PRODUCT_NAME } from '@common/edition'
 
 let mainWindow: BrowserWindow | null = null
+
+app.setName(APP_PRODUCT_NAME)
 
 // Only one Aura at a time — two instances would race on the same data files.
 if (!app.requestSingleInstanceLock()) {
@@ -35,7 +38,7 @@ function createWindow(): void {
     height: 780,
     minWidth: 860,
     minHeight: 560,
-    title: 'Aura AI',
+    title: APP_NAME,
     backgroundColor: '#0d0f12',
     autoHideMenuBar: true,
     ...(existsSync(iconPath) ? { icon: iconPath } : {}),

@@ -1,4 +1,5 @@
 import type { ChatProvider, ChatStreamOptions, ProviderContent, ProviderEvent, ToolCall } from './types'
+import { IS_KOREAN_EDITION } from '@common/edition'
 
 // Anthropic Messages API via direct REST/SSE. Keeping this provider SDK-free
 // avoids packaging npm SDK source files into the Electron main process.
@@ -74,7 +75,7 @@ export class AnthropicProvider implements ChatProvider {
       signal: opts.signal
     })
     if (!res.ok || !res.body) {
-      throw new Error(`Anthropic request failed (${res.status}): ${(await res.text()).slice(0, 300)}`)
+      throw new Error(`${IS_KOREAN_EDITION ? 'Anthropic 요청 실패' : 'Anthropic request failed'} (${res.status}): ${(await res.text()).slice(0, 300)}`)
     }
 
     const toolAcc = new Map<number, { id: string; name: string; args: string }>()
@@ -116,7 +117,7 @@ export class AnthropicProvider implements ChatProvider {
         const { done, value } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
-        if (buffer.length > 4_000_000) throw new Error('Streaming response exceeded buffer limit')
+        if (buffer.length > 4_000_000) throw new Error(IS_KOREAN_EDITION ? '스트리밍 응답이 버퍼 한도를 초과했습니다' : 'Streaming response exceeded buffer limit')
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
         for (const line of lines) {
@@ -153,11 +154,11 @@ export class AnthropicProvider implements ChatProvider {
           messages: [{ role: 'user', content: 'ping' }]
         })
       })
-      if (!res.ok) return { ok: false, message: `Anthropic API returned ${res.status}: ${(await res.text()).slice(0, 200)}` }
+      if (!res.ok) return { ok: false, message: `Anthropic API ${IS_KOREAN_EDITION ? '응답 오류' : 'returned'} ${res.status}: ${(await res.text()).slice(0, 200)}` }
       const json: any = await res.json()
       return {
         ok: true,
-        message: `Connected (${json.model ?? 'Anthropic'}).`,
+        message: IS_KOREAN_EDITION ? `연결됨 (${json.model ?? 'Anthropic'}).` : `Connected (${json.model ?? 'Anthropic'}).`,
         models: ANTHROPIC_MODELS
       }
     } catch (err) {

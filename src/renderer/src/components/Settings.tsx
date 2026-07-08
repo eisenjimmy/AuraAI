@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import type { AppSettings, Persona, ProviderId, ProviderPreset, VoiceSettings } from '@common/types'
 import { Avatar } from './Avatar'
 import { KOKORO_VOICES, SpeechQueue, normalizeForSpeech } from '../lib/voice'
-import { DEFAULT_AVATAR_CHOICES } from '../lib/avatarAssets'
+import { DEFAULT_AVATAR_CHOICES, defaultAvatarIdForPersona } from '../lib/avatarAssets'
 import { CloseIcon, PlayIcon } from './Icons'
+import { t } from '../lib/i18n'
 
 interface SettingsProps {
   settings: AppSettings
@@ -21,13 +22,13 @@ export function SettingsModal(props: SettingsProps): React.JSX.Element {
     <div className="modal-overlay" onMouseDown={e => e.target === e.currentTarget && props.onClose()}>
       <div className="modal">
         <div className="modal-header">
-          <h2>Settings</h2>
+          <h2>{t.settings.title}</h2>
           <button className="icon-btn" onClick={props.onClose}><CloseIcon /></button>
         </div>
         <div className="tabs">
-          <button className={`tab ${tab === 'ai' ? 'active' : ''}`} onClick={() => setTab('ai')}>AI Provider</button>
-          <button className={`tab ${tab === 'personas' ? 'active' : ''}`} onClick={() => setTab('personas')}>Personas</button>
-          <button className={`tab ${tab === 'chat' ? 'active' : ''}`} onClick={() => setTab('chat')}>Chat & Features</button>
+          <button className={`tab ${tab === 'ai' ? 'active' : ''}`} onClick={() => setTab('ai')}>{t.settings.aiProvider}</button>
+          <button className={`tab ${tab === 'personas' ? 'active' : ''}`} onClick={() => setTab('personas')}>{t.settings.personas}</button>
+          <button className={`tab ${tab === 'chat' ? 'active' : ''}`} onClick={() => setTab('chat')}>{t.settings.chatFeatures}</button>
         </div>
         <div className="modal-body">
           {tab === 'ai' && <ProviderTab {...props} />}
@@ -84,7 +85,7 @@ function ProviderTab({ settings, onSettingsSaved }: SettingsProps): React.JSX.El
 
   const save = (): void => {
     onSettingsSaved(draft)
-    setStatus({ ok: true, message: 'Saved.' })
+    setStatus({ ok: true, message: t.common.saved })
   }
 
   const modelOptions =
@@ -107,17 +108,17 @@ function ProviderTab({ settings, onSettingsSaved }: SettingsProps): React.JSX.El
       <div style={{ marginTop: 16 }}>
         {preset?.id === 'local' && (
           <div className="field">
-            <label>Server URL</label>
+            <label>{t.settings.serverUrl}</label>
             <input
               value={draft.provider.baseUrl ?? ''}
               onChange={e => setDraft(d => ({ ...d, provider: { ...d.provider, baseUrl: e.target.value } }))}
             />
-            <div className="hint">Any OpenAI-compatible server: Ollama, LM Studio, llama.cpp…</div>
+            <div className="hint">{t.settings.serverHint}</div>
           </div>
         )}
         {preset?.needsApiKey && (
           <div className="field">
-            <label>API key</label>
+            <label>{t.settings.apiKey}</label>
             <input
               type="password"
               value={draft.provider.apiKey ?? ''}
@@ -126,7 +127,7 @@ function ProviderTab({ settings, onSettingsSaved }: SettingsProps): React.JSX.El
           </div>
         )}
         <div className="field">
-          <label>Model</label>
+          <label>{t.settings.model}</label>
           {modelOptions.length > 0 ? (
             <select
               value={draft.provider.model}
@@ -148,9 +149,9 @@ function ProviderTab({ settings, onSettingsSaved }: SettingsProps): React.JSX.El
         </div>
         <div className="row">
           <button className="btn" onClick={() => void test()} disabled={testing}>
-            {testing ? 'Testing…' : 'Test connection'}
+            {testing ? t.common.testing : t.common.testConnection}
           </button>
-          <button className="btn primary" onClick={save}>Save</button>
+          <button className="btn primary" onClick={save}>{t.common.save}</button>
         </div>
         {status && <div className={`status ${status.ok ? 'ok' : 'err'}`}>{status.message}</div>}
       </div>
@@ -169,9 +170,9 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
 
   useEffect(() => {
     previewSpeech.current = new SpeechQueue((status, message) => {
-      if (status === 'loading') setVoiceStatus(message ?? 'Loading Kokoro...')
-      else if (status === 'speaking') setVoiceStatus('Playing preview.')
-      else if (status === 'error') setVoiceStatus(message ?? 'Voice preview failed.')
+      if (status === 'loading') setVoiceStatus(t.settings.loadingVoice)
+      else if (status === 'speaking') setVoiceStatus(t.settings.playingPreview)
+      else if (status === 'error') setVoiceStatus(message ?? t.settings.voiceFailed)
       else setVoiceStatus('')
     })
     return () => previewSpeech.current?.stop()
@@ -185,7 +186,7 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
 
-  if (!draft) return <p>No personas.</p>
+  if (!draft) return <p>{t.settings.noPersonas}</p>
 
   const setVoice = (patch: Partial<VoiceSettings>): void =>
     setDraft(d => (d ? { ...d, voice: { ...d.voice, ...patch } } : d))
@@ -195,7 +196,7 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
     if (!q) return
     q.stop()
     q.setVoice({ ...draft.voice, voice: draft.voice.voice || 'af_heart' })
-    q.push(normalizeForSpeech(`Hey! I'm ${draft.name}. ${draft.tagline}`))
+    q.push(normalizeForSpeech(t.settings.previewText(draft.name, draft.tagline)))
     q.flush()
   }
 
@@ -213,7 +214,7 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
   }
 
   const reset = async (): Promise<void> => {
-    if (!window.confirm(`Reset ${draft.name} to the built-in default?`)) return
+    if (!window.confirm(t.settings.resetConfirm(draft.name))) return
     const restored = await window.aura.resetPersona(draft.id)
     setDraft({ ...restored, voice: { ...restored.voice } })
     onPersonasChanged()
@@ -241,13 +242,13 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
         <div>
           <div className="p-name">{draft.name}</div>
           <div className="hint" style={{ marginTop: 6 }}>
-            Default portraits can be restored at any time.
+            {t.settings.defaultsHint}
           </div>
         </div>
       </div>
 
       <div className="field">
-        <label>Profile image</label>
+        <label>{t.settings.profileImage}</label>
         <div className="avatar-choice-grid">
           {DEFAULT_AVATAR_CHOICES.map(choice => (
             <button
@@ -257,29 +258,29 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
               title={choice.label}
             >
               <img src={choice.src} alt="" />
-              <span>{choice.id === `default:${draft.id}` ? 'Original' : choice.label}</span>
+              <span>{choice.id === defaultAvatarIdForPersona(draft.id) ? t.settings.original : choice.label}</span>
             </button>
           ))}
         </div>
         <div className="row" style={{ marginTop: 8 }}>
           {draft.builtIn && (
-            <button className="btn ghost" onClick={() => chooseAvatar(`default:${draft.id}`)}>
-              Use original
+            <button className="btn ghost" onClick={() => chooseAvatar(defaultAvatarIdForPersona(draft.id))}>
+              {t.settings.useOriginal}
             </button>
           )}
           <button className="btn" onClick={() => void uploadAvatar()}>
-            Upload image
+            {t.settings.uploadImage}
           </button>
         </div>
       </div>
 
       <div className="row">
         <div className="field">
-          <label>Name</label>
+          <label>{t.settings.name}</label>
           <input value={draft.name} onChange={e => setDraft(d => (d ? { ...d, name: e.target.value } : d))} />
         </div>
         <div className="field">
-          <label>Accent color</label>
+          <label>{t.settings.accentColor}</label>
           <input
             type="color"
             value={draft.color}
@@ -289,11 +290,11 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
         </div>
       </div>
       <div className="field">
-        <label>Tagline</label>
+        <label>{t.settings.tagline}</label>
         <input value={draft.tagline} onChange={e => setDraft(d => (d ? { ...d, tagline: e.target.value } : d))} />
       </div>
       <div className="field">
-        <label>Personality (system prompt)</label>
+        <label>{t.settings.prompt}</label>
         <textarea
           rows={8}
           value={draft.prompt}
@@ -302,7 +303,7 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
       </div>
 
       <div className="field">
-        <label>Kokoro voice</label>
+        <label>{t.settings.kokoroVoice}</label>
         <div className="voice-preview">
           <select
             style={{ flex: 1 }}
@@ -311,18 +312,18 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
           >
             {KOKORO_VOICES.map(v => (
               <option key={v.id} value={v.id}>
-                {v.label} ({v.gender}, {v.language})
+                {v.label} ({t.settings.voiceGender[v.gender]}, {(t.settings.voiceLanguage as Record<string, string>)[v.language] ?? v.language})
               </option>
             ))}
           </select>
           <button className="btn" onClick={preview} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <PlayIcon /> Preview
+            <PlayIcon /> {t.settings.preview}
           </button>
         </div>
         {voiceStatus && <div className="hint" style={{ marginTop: 6 }}>{voiceStatus}</div>}
       </div>
       <div className="field">
-        <label>Speed ({draft.voice.rate.toFixed(2)})</label>
+        <label>{t.settings.speed(draft.voice.rate.toFixed(2))}</label>
         <input
           type="range"
           min={0.5}
@@ -334,9 +335,9 @@ function PersonasTab({ personas, onPersonasChanged }: SettingsProps): React.JSX.
       </div>
 
       <div className="row">
-        <button className="btn primary" onClick={() => void save()}>Save persona</button>
+        <button className="btn primary" onClick={() => void save()}>{t.settings.savePersona}</button>
         {draft.builtIn && (
-          <button className="btn ghost" onClick={() => void reset()}>Reset to default</button>
+          <button className="btn ghost" onClick={() => void reset()}>{t.settings.resetPersona}</button>
         )}
       </div>
     </>
@@ -368,52 +369,52 @@ function ChatTab({ settings, onSettingsSaved }: SettingsProps): React.JSX.Elemen
     <>
       <div className="row" style={{ marginBottom: 4 }}>
         <div className="field">
-          <label>Your name</label>
+          <label>{t.settings.yourName}</label>
           <input value={draft.userName} onChange={e => update({ userName: e.target.value })} />
         </div>
         <div className="field">
-          <label>Theme</label>
+          <label>{t.settings.theme}</label>
           <select value={draft.theme} onChange={e => update({ theme: e.target.value as 'dark' | 'light' })}>
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
+            <option value="dark">{t.common.dark}</option>
+            <option value="light">{t.common.light}</option>
           </select>
         </div>
       </div>
       <div className="field">
-        <label>About you</label>
+        <label>{t.settings.aboutYou}</label>
         <textarea rows={2} value={draft.userBio} onChange={e => update({ userBio: e.target.value })} />
       </div>
 
       <div className="field">
-        <label>Image uploads folder</label>
+        <label>{t.settings.imageFolder}</label>
         <div className="path-row">
           <input value={draft.imageStoragePath ?? ''} onChange={e => update({ imageStoragePath: e.target.value })} />
-          <button className="btn" onClick={() => void chooseImageFolder()}>Choose</button>
+          <button className="btn" onClick={() => void chooseImageFolder()}>{t.common.choose}</button>
         </div>
-        <div className="hint">Chat images are copied here before they are shown or sent to the model.</div>
+        <div className="hint">{t.settings.imageFolderHint}</div>
       </div>
 
       <Toggle
-        label="Voice replies"
-        desc="Friends speak their replies out loud using each persona's voice."
+        label={t.settings.voiceReplies}
+        desc={t.settings.voiceRepliesDesc}
         on={draft.voiceEnabled}
         onToggle={toggle('voiceEnabled')}
       />
       <Toggle
-        label="Web search & current awareness"
-        desc="When a question needs fresh information, Aura quietly searches the web and answers with today's context."
+        label={t.settings.webSearch}
+        desc={t.settings.webSearchDesc}
         on={draft.webSearchEnabled}
         onToggle={toggle('webSearchEnabled')}
       />
       <Toggle
-        label="Long-term memory"
-        desc="Friends remember durable facts about you between conversations. Stored as plain markdown you can open in Obsidian."
+        label={t.settings.memory}
+        desc={t.settings.memoryDesc}
         on={draft.memoryEnabled}
         onToggle={toggle('memoryEnabled')}
       />
       <Toggle
-        label="Tools mode (advanced)"
-        desc="Lets the model decide when to search, read pages and save memories itself (agentic tool-calling, up to 4 rounds). Off = Aura's simpler, deterministic pipeline. Needs a model with solid tool-calling."
+        label={t.settings.toolsMode}
+        desc={t.settings.toolsModeDesc}
         on={draft.toolsMode}
         onToggle={toggle('toolsMode')}
       />

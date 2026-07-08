@@ -5,6 +5,8 @@ import { ChatView } from './components/ChatView'
 import { Onboarding } from './components/Onboarding'
 import { SettingsModal } from './components/Settings'
 import { MemoryPanel } from './components/MemoryPanel'
+import { t } from './lib/i18n'
+import { AURA_EDITION } from '@common/edition'
 
 export default function App(): React.JSX.Element {
   const [settings, setSettings] = useState<AppSettings | null>(null)
@@ -29,6 +31,8 @@ export default function App(): React.JSX.Element {
 
   useEffect(() => {
     document.documentElement.dataset.theme = settings?.theme ?? 'dark'
+    document.documentElement.lang = AURA_EDITION === 'ko' ? 'ko' : 'en'
+    document.title = t.appName
   }, [settings?.theme])
 
   const saveSettings = useCallback((next: AppSettings) => {
@@ -59,7 +63,7 @@ export default function App(): React.JSX.Element {
             const now = new Date().toISOString()
             void window.aura.saveMemory({
               slug: 'about-' + (next.userName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'me'),
-              title: `About ${next.userName.trim() || 'them'}`,
+              title: t.memory.aboutTitle(next.userName.trim()),
               type: 'profile',
               importance: 5,
               body: next.userBio.trim(),

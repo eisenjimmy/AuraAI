@@ -1,3 +1,6 @@
+import { IS_KOREAN_EDITION } from '@common/edition'
+import { t } from './i18n'
+
 const avatarUrls = {
   'nova': new URL('../assets/avatars/nova.png', import.meta.url).href,
   'sage': new URL('../assets/avatars/sage.png', import.meta.url).href,
@@ -6,6 +9,13 @@ const avatarUrls = {
   'max': new URL('../assets/avatars/max.png', import.meta.url).href,
   'gilleon': new URL('../assets/avatars/gilleon.png', import.meta.url).href,
   'neir': new URL('../assets/avatars/neir.png', import.meta.url).href,
+  'nova-ko': new URL('../assets/avatars/nova-ko.png', import.meta.url).href,
+  'sage-ko': new URL('../assets/avatars/sage-ko.png', import.meta.url).href,
+  'rio-ko': new URL('../assets/avatars/rio-ko.png', import.meta.url).href,
+  'luna-ko': new URL('../assets/avatars/luna-ko.png', import.meta.url).href,
+  'max-ko': new URL('../assets/avatars/max-ko.png', import.meta.url).href,
+  'gilleon-ko': new URL('../assets/avatars/gilleon-ko.png', import.meta.url).href,
+  'neir-ko': new URL('../assets/avatars/neir-ko.png', import.meta.url).href,
   'korean-man': new URL('../assets/avatars/korean-man.png', import.meta.url).href,
   'korean-woman': new URL('../assets/avatars/korean-woman.png', import.meta.url).href,
   'european-man': new URL('../assets/avatars/european-man.png', import.meta.url).href,
@@ -25,24 +35,42 @@ export interface AvatarChoice {
   builtInDefault?: boolean
 }
 
+const englishDefaults: AvatarChoice[] = [
+  { id: 'default:nova', label: t.avatars.choices['default:nova'], src: avatarUrls.nova, builtInDefault: true },
+  { id: 'default:sage', label: t.avatars.choices['default:sage'], src: avatarUrls.sage, builtInDefault: true },
+  { id: 'default:rio', label: t.avatars.choices['default:rio'], src: avatarUrls.rio, builtInDefault: true },
+  { id: 'default:luna', label: t.avatars.choices['default:luna'], src: avatarUrls.luna, builtInDefault: true },
+  { id: 'default:max', label: t.avatars.choices['default:max'], src: avatarUrls.max, builtInDefault: true },
+  { id: 'default:gilleon', label: t.avatars.choices['default:gilleon'], src: avatarUrls.gilleon, builtInDefault: true },
+  { id: 'default:neir', label: t.avatars.choices['default:neir'], src: avatarUrls.neir, builtInDefault: true }
+]
+
+const koreanDefaults: AvatarChoice[] = [
+  { id: 'default:nova-ko', label: t.avatars.choices['default:nova'], src: avatarUrls['nova-ko'], builtInDefault: true },
+  { id: 'default:sage-ko', label: t.avatars.choices['default:sage'], src: avatarUrls['sage-ko'], builtInDefault: true },
+  { id: 'default:rio-ko', label: t.avatars.choices['default:rio'], src: avatarUrls['rio-ko'], builtInDefault: true },
+  { id: 'default:luna-ko', label: t.avatars.choices['default:luna'], src: avatarUrls['luna-ko'], builtInDefault: true },
+  { id: 'default:max-ko', label: t.avatars.choices['default:max'], src: avatarUrls['max-ko'], builtInDefault: true },
+  { id: 'default:gilleon-ko', label: t.avatars.choices['default:gilleon'], src: avatarUrls['gilleon-ko'], builtInDefault: true },
+  { id: 'default:neir-ko', label: t.avatars.choices['default:neir'], src: avatarUrls['neir-ko'], builtInDefault: true }
+]
+
+const extraChoices: AvatarChoice[] = [
+  { id: 'choice:korean-man', label: t.avatars.choices['choice:korean-man'], src: avatarUrls['korean-man'] },
+  { id: 'choice:korean-woman', label: t.avatars.choices['choice:korean-woman'], src: avatarUrls['korean-woman'] },
+  { id: 'choice:european-man', label: t.avatars.choices['choice:european-man'], src: avatarUrls['european-man'] },
+  { id: 'choice:european-woman', label: t.avatars.choices['choice:european-woman'], src: avatarUrls['european-woman'] },
+  { id: 'choice:south-asian-man', label: t.avatars.choices['choice:south-asian-man'], src: avatarUrls['south-asian-man'] },
+  { id: 'choice:latina-woman', label: t.avatars.choices['choice:latina-woman'], src: avatarUrls['latina-woman'] },
+  { id: 'choice:middle-eastern-man', label: t.avatars.choices['choice:middle-eastern-man'], src: avatarUrls['middle-eastern-man'] },
+  { id: 'choice:black-woman', label: t.avatars.choices['choice:black-woman'], src: avatarUrls['black-woman'] },
+  { id: 'choice:silver-european-man', label: t.avatars.choices['choice:silver-european-man'], src: avatarUrls['silver-european-man'] },
+  { id: 'choice:mixed-race-woman', label: t.avatars.choices['choice:mixed-race-woman'], src: avatarUrls['mixed-race-woman'] }
+]
+
 export const DEFAULT_AVATAR_CHOICES: AvatarChoice[] = [
-  { id: 'default:nova', label: 'Nova original', src: avatarUrls.nova, builtInDefault: true },
-  { id: 'default:sage', label: 'Sage original', src: avatarUrls.sage, builtInDefault: true },
-  { id: 'default:rio', label: 'Rio original', src: avatarUrls.rio, builtInDefault: true },
-  { id: 'default:luna', label: 'Luna original', src: avatarUrls.luna, builtInDefault: true },
-  { id: 'default:max', label: 'Max original', src: avatarUrls.max, builtInDefault: true },
-  { id: 'default:gilleon', label: 'Gilleon original', src: avatarUrls.gilleon, builtInDefault: true },
-  { id: 'default:neir', label: 'Neir original', src: avatarUrls.neir, builtInDefault: true },
-  { id: 'choice:korean-man', label: 'Korean man', src: avatarUrls['korean-man'] },
-  { id: 'choice:korean-woman', label: 'Korean woman', src: avatarUrls['korean-woman'] },
-  { id: 'choice:european-man', label: 'European man', src: avatarUrls['european-man'] },
-  { id: 'choice:european-woman', label: 'European woman', src: avatarUrls['european-woman'] },
-  { id: 'choice:south-asian-man', label: 'South Asian man', src: avatarUrls['south-asian-man'] },
-  { id: 'choice:latina-woman', label: 'Latina woman', src: avatarUrls['latina-woman'] },
-  { id: 'choice:middle-eastern-man', label: 'Middle Eastern man', src: avatarUrls['middle-eastern-man'] },
-  { id: 'choice:black-woman', label: 'Black woman', src: avatarUrls['black-woman'] },
-  { id: 'choice:silver-european-man', label: 'Silver-haired man', src: avatarUrls['silver-european-man'] },
-  { id: 'choice:mixed-race-woman', label: 'Mixed-race woman', src: avatarUrls['mixed-race-woman'] }
+  ...(IS_KOREAN_EDITION ? koreanDefaults : englishDefaults),
+  ...extraChoices
 ]
 
 const avatarLookup = new Map(DEFAULT_AVATAR_CHOICES.map(choice => [choice.id, choice.src]))
@@ -51,4 +79,8 @@ export function resolveAvatarSrc(value: string): string | undefined {
   if (!value) return undefined
   if (value.startsWith('aura-avatar://')) return value
   return avatarLookup.get(value)
+}
+
+export function defaultAvatarIdForPersona(personaId: string): string {
+  return IS_KOREAN_EDITION ? `default:${personaId}-ko` : `default:${personaId}`
 }

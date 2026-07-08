@@ -4,7 +4,11 @@ const fs = require("fs");
 const path = require("path");
 const url = require("url");
 const crypto = require("crypto");
-const DEFAULT_PERSONAS = [
+const AURA_EDITION = "en";
+const IS_KOREAN_EDITION = AURA_EDITION === "ko";
+const APP_NAME = "Aura AI";
+const APP_PRODUCT_NAME = "Aura AI";
+const ENGLISH_PERSONAS = [
   {
     id: "nova",
     name: "Nova",
@@ -132,6 +136,7 @@ What you're not: a motivational speaker or a trend-chaser. You do not confuse mi
 Honesty: you're an AI companion. If asked, you answer plainly and continue the work.`
   }
 ];
+const DEFAULT_PERSONAS = ENGLISH_PERSONAS;
 function dataDir() {
   const dir = electron.app.getPath("userData");
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -564,7 +569,7 @@ class OpenAICompatProvider {
       signal: opts.signal
     });
     if (!res.ok || !res.body) {
-      throw new Error(`Chat request failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+      throw new Error(`${"Chat request failed"} (${res.status}): ${(await res.text()).slice(0, 300)}`);
     }
     const toolAcc = /* @__PURE__ */ new Map();
     const handleLine = (line) => {
@@ -603,7 +608,7 @@ class OpenAICompatProvider {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        if (buffer.length > 4e6) throw new Error("Streaming response exceeded buffer limit");
+        if (buffer.length > 4e6) throw new Error(IS_KOREAN_EDITION ? "스트리밍 응답이 버퍼 한도를 초과했습니다" : "Streaming response exceeded buffer limit");
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
         for (const line of lines) {
@@ -658,7 +663,7 @@ class OpenAICompatProvider {
   }
   async listModels() {
     const res = await fetch(`${this.baseUrl}/models`, { headers: this.headers() });
-    if (!res.ok) throw new Error(`GET /models failed (${res.status})`);
+    if (!res.ok) throw new Error(`GET /models ${"failed"} (${res.status})`);
     const json = await res.json();
     const ids = (json.data ?? []).map((m) => String(m.id));
     return ids.sort();
@@ -666,7 +671,11 @@ class OpenAICompatProvider {
   async test() {
     try {
       const models = await this.listModels();
-      return { ok: true, message: `Connected. ${models.length} model(s) available.`, models };
+      return {
+        ok: true,
+        message: IS_KOREAN_EDITION ? `연결됨. 사용 가능한 모델 ${models.length}개.` : `Connected. ${models.length} model(s) available.`,
+        models
+      };
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) };
     }
@@ -751,7 +760,7 @@ class AnthropicProvider {
       signal: opts.signal
     });
     if (!res.ok || !res.body) {
-      throw new Error(`Anthropic request failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+      throw new Error(`${"Anthropic request failed"} (${res.status}): ${(await res.text()).slice(0, 300)}`);
     }
     const toolAcc = /* @__PURE__ */ new Map();
     const handleLine = (line) => {
@@ -793,7 +802,7 @@ class AnthropicProvider {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        if (buffer.length > 4e6) throw new Error("Streaming response exceeded buffer limit");
+        if (buffer.length > 4e6) throw new Error(IS_KOREAN_EDITION ? "스트리밍 응답이 버퍼 한도를 초과했습니다" : "Streaming response exceeded buffer limit");
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
         for (const line of lines) {
@@ -826,11 +835,11 @@ class AnthropicProvider {
           messages: [{ role: "user", content: "ping" }]
         })
       });
-      if (!res.ok) return { ok: false, message: `Anthropic API returned ${res.status}: ${(await res.text()).slice(0, 200)}` };
+      if (!res.ok) return { ok: false, message: `Anthropic API ${IS_KOREAN_EDITION ? "응답 오류" : "returned"} ${res.status}: ${(await res.text()).slice(0, 200)}` };
       const json = await res.json();
       return {
         ok: true,
-        message: `Connected (${json.model ?? "Anthropic"}).`,
+        message: IS_KOREAN_EDITION ? `연결됨 (${json.model ?? "Anthropic"}).` : `Connected (${json.model ?? "Anthropic"}).`,
         models: ANTHROPIC_MODELS
       };
     } catch (err) {
@@ -932,7 +941,7 @@ class GeminiProvider {
       signal: opts.signal
     });
     if (!res.ok || !res.body) {
-      throw new Error(`Gemini request failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+      throw new Error(`${"Gemini request failed"} (${res.status}): ${(await res.text()).slice(0, 300)}`);
     }
     const calls = [];
     const textFromLine = (line) => {
@@ -967,7 +976,7 @@ class GeminiProvider {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        if (buffer.length > 4e6) throw new Error("Streaming response exceeded buffer limit");
+        if (buffer.length > 4e6) throw new Error(IS_KOREAN_EDITION ? "스트리밍 응답이 버퍼 한도를 초과했습니다" : "Streaming response exceeded buffer limit");
         const lines = buffer.split("\n");
         buffer = lines.pop() ?? "";
         for (const line of lines) {
@@ -1005,10 +1014,10 @@ class GeminiProvider {
       const res = await fetch(`${BASE}/models?pageSize=50`, {
         headers: { "x-goog-api-key": this.apiKey }
       });
-      if (!res.ok) return { ok: false, message: `Gemini API returned ${res.status}` };
+      if (!res.ok) return { ok: false, message: IS_KOREAN_EDITION ? `Gemini API 응답 오류 ${res.status}` : `Gemini API returned ${res.status}` };
       const json = await res.json();
       const models = (json.models ?? []).map((m) => String(m.name).replace(/^models\//, "")).filter((n) => n.startsWith("gemini"));
-      return { ok: true, message: "Connected.", models: models.length ? models : GEMINI_MODELS };
+      return { ok: true, message: IS_KOREAN_EDITION ? "연결됨." : "Connected.", models: models.length ? models : GEMINI_MODELS };
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) };
     }
@@ -1112,15 +1121,35 @@ Assistant ({PERSONA}): {ASSISTANT}
 
 Return ONLY one compact JSON object, no prose. Example:
 {"remember": true, "title": "Favorite coffee", "type": "preference", "content": "Prefers dark roast coffee in the morning.", "importance": 3, "updates": null, "links": ["morning-routine"]}`;
+const EXTRACTION_PROMPT_KO = `당신은 개인 AI 컴패니언의 기억 관리자입니다. 아래 대화 한 턴을 분석해 장기적으로 기억할 가치가 있는 사용자 관련 사실을 최대 하나만 추출하세요.
+
+허용 타입: preference, profile, relationship, event, goal, fact.
+
+규칙:
+- 이름, 직업, 주변 사람, 취향, 진행 중인 프로젝트, 중요한 날짜처럼 구체적이고 앞으로의 대화에 유용한 사실만 추출하세요.
+- 지시사항, 임시 작업, 잡담, 일반 상식은 추출하지 마세요.
+- 노트 내용은 사용자를 3인칭으로 설명하세요. 예: "지미는 아침에 진한 커피를 선호한다."
+- 아래 기존 기억이 같은 사실을 이미 다루면 "updates"에 기존 slug를 넣어 중복 대신 업데이트하게 하세요.
+- 추출할 것이 없으면 정확히 {"remember": false}만 답하세요.
+- title과 content는 자연스러운 한국어로 쓰세요. type은 위 영어 타입 중 하나를 쓰세요.
+
+기존 기억 slug: {SLUGS}
+
+대화:
+사용자: {USER}
+어시스턴트 ({PERSONA}): {ASSISTANT}
+
+간결한 JSON 객체 하나만 반환하세요. 설명 금지. 예:
+{"remember": true, "title": "커피 취향", "type": "preference", "content": "아침에는 진한 커피를 선호한다.", "importance": 3, "updates": null, "links": ["morning-routine"]}`;
 async function extractMemory(provider, model, vault, personaName, personaId, userMessage, assistantMessage) {
   try {
     if (userMessage.trim().length < 6) return { saved: false };
     const slugs = vault.list().map((n) => n.slug).slice(0, 80);
-    const prompt = EXTRACTION_PROMPT.replace("{SLUGS}", () => slugs.length ? slugs.join(", ") : "(none yet)").replace("{USER}", () => userMessage.slice(0, 2e3)).replace("{PERSONA}", () => personaName).replace("{ASSISTANT}", () => assistantMessage.slice(0, 2e3));
+    const prompt = (IS_KOREAN_EDITION ? EXTRACTION_PROMPT_KO : EXTRACTION_PROMPT).replace("{SLUGS}", () => slugs.length ? slugs.join(", ") : "(none yet)").replace("{USER}", () => userMessage.slice(0, 2e3)).replace("{PERSONA}", () => personaName).replace("{ASSISTANT}", () => assistantMessage.slice(0, 2e3));
     let raw = "";
     for await (const ev of provider.streamChat({
       model,
-      system: "You extract memory notes. Output only JSON.",
+      system: IS_KOREAN_EDITION ? "기억 노트를 추출합니다. JSON만 출력하세요." : "You extract memory notes. Output only JSON.",
       messages: [{ role: "user", content: prompt }],
       maxTokens: 300
     })) {
@@ -1301,17 +1330,22 @@ function buildSystemPrompt(persona, settings, memories, searchResults) {
   parts.push(persona.prompt.trim());
   if (settings.userName || settings.userBio) {
     const who = [];
-    if (settings.userName) who.push(`Their name is ${settings.userName}.`);
-    if (settings.userBio) who.push(`About them (in their own words): ${settings.userBio}`);
-    parts.push(`ABOUT THE PERSON YOU'RE TALKING TO:
+    {
+      if (settings.userName) who.push(`Their name is ${settings.userName}.`);
+      if (settings.userBio) who.push(`About them (in their own words): ${settings.userBio}`);
+      parts.push(`ABOUT THE PERSON YOU'RE TALKING TO:
 ${who.join("\n")}`);
+    }
   }
   const now = /* @__PURE__ */ new Date();
-  const dateStr = now.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
-  const timeStr = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  parts.push(
-    `CURRENT MOMENT: The authoritative current local date and time is ${dateStr}, ${timeStr}. When a question depends on time (events, releases, "how long ago"), reason from this date and say the as-of date when it matters.`
-  );
+  const locale = "en-US";
+  const dateStr = now.toLocaleDateString(locale, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const timeStr = now.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+  {
+    parts.push(
+      `CURRENT MOMENT: The authoritative current local date and time is ${dateStr}, ${timeStr}. When a question depends on time (events, releases, "how long ago"), reason from this date and say the as-of date when it matters.`
+    );
+  }
   if (settings.memoryEnabled) {
     parts.push(
       `YOU HAVE A REAL LONG-TERM MEMORY: durable facts from past conversations are saved automatically and the relevant ones are shown to you. If asked whether you can remember things, the honest answer is yes.`
@@ -1560,19 +1594,19 @@ class ChatPipeline {
         if (memories.length > 0) {
           pushActivity({
             kind: "memory-recall",
-            label: memories.length === 1 ? "Remembered 1 thing" : `Remembered ${memories.length} things`,
+            label: IS_KOREAN_EDITION ? `기억 ${memories.length}개를 떠올림` : memories.length === 1 ? "Remembered 1 thing" : `Remembered ${memories.length} things`,
             detail: memories.map((m) => m.title).join(", ")
           });
         }
       }
       let searchResults = null;
       if (!settings.toolsMode && settings.webSearchEnabled && shouldSearch(text)) {
-        pushActivity({ kind: "search", label: "Searching the web..." });
+        pushActivity({ kind: "search", label: IS_KOREAN_EDITION ? "웹 검색 중..." : "Searching the web..." });
         searchResults = await webSearch(text, settings, 5).catch(() => null);
         if (searchResults && searchResults.length > 0) {
           pushActivity({
             kind: "search",
-            label: `Found ${searchResults.length} results`,
+            label: IS_KOREAN_EDITION ? `검색 결과 ${searchResults.length}개 발견` : `Found ${searchResults.length} results`,
             detail: searchResults.map((r) => r.title).join(" | ")
           });
         }
@@ -1640,7 +1674,10 @@ class ChatPipeline {
         reply.content
       );
       if (result.saved && result.note) {
-        const event = { kind: "memory-save", label: `Remembered: ${result.note.title}` };
+        const event = {
+          kind: "memory-save",
+          label: IS_KOREAN_EDITION ? `기억함: ${result.note.title}` : `Remembered: ${result.note.title}`
+        };
         reply.activity = [...reply.activity ?? [], event];
         updateMessage(personaId, reply);
         this.emit({ type: "activity", personaId, messageId: reply.id, event });
@@ -1711,6 +1748,12 @@ function humanizeProviderError(err, settings) {
   }
   return raw.length > 300 ? raw.slice(0, 300) + "…" : raw;
 }
+const uiText = {
+  chooseProfileImage: "Choose a profile image",
+  addImages: "Add images",
+  imageFilter: "Images",
+  chooseImageFolder: "Choose image storage folder"
+};
 function registerIpc(getWindow) {
   const pipeline = new ChatPipeline(
     () => loadSettings(),
@@ -1727,8 +1770,8 @@ function registerIpc(getWindow) {
     const win = getWindow();
     if (!win) return null;
     const result = await electron.dialog.showOpenDialog(win, {
-      title: "Choose a profile image",
-      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
+      title: uiText.chooseProfileImage,
+      filters: [{ name: uiText.imageFilter, extensions: ["png", "jpg", "jpeg", "gif", "webp"] }],
       properties: ["openFile"]
     });
     if (result.canceled || result.filePaths.length === 0) return null;
@@ -1743,8 +1786,8 @@ function registerIpc(getWindow) {
     const win = getWindow();
     if (!win) return [];
     const result = await electron.dialog.showOpenDialog(win, {
-      title: "Add images",
-      filters: [{ name: "Images", extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
+      title: uiText.addImages,
+      filters: [{ name: uiText.imageFilter, extensions: ["png", "jpg", "jpeg", "webp", "gif"] }],
       properties: ["openFile", "multiSelections"]
     });
     if (result.canceled || result.filePaths.length === 0) return [];
@@ -1774,7 +1817,7 @@ function registerIpc(getWindow) {
     const win = getWindow();
     if (!win) return null;
     const result = await electron.dialog.showOpenDialog(win, {
-      title: "Choose image storage folder",
+      title: uiText.chooseImageFolder,
       properties: ["openDirectory", "createDirectory"]
     });
     if (result.canceled || result.filePaths.length === 0) return null;
@@ -1827,6 +1870,7 @@ function mimeForExt(ext) {
   }
 }
 let mainWindow = null;
+electron.app.setName(APP_PRODUCT_NAME);
 if (!electron.app.requestSingleInstanceLock()) {
   electron.app.quit();
 } else {
@@ -1849,7 +1893,7 @@ function createWindow() {
     height: 780,
     minWidth: 860,
     minHeight: 560,
-    title: "Aura AI",
+    title: APP_NAME,
     backgroundColor: "#0d0f12",
     autoHideMenuBar: true,
     ...fs.existsSync(iconPath) ? { icon: iconPath } : {},

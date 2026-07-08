@@ -4,6 +4,7 @@ import { Avatar, UserAvatar } from './Avatar'
 import { Markdown } from './Markdown'
 import { SpeechQueue } from '../lib/voice'
 import { activityIcon, CloseIcon, ImageIcon, SendIcon, SpeakerIcon, StopIcon, WarnIcon } from './Icons'
+import { t } from '../lib/i18n'
 
 interface ChatViewProps {
   persona: Persona
@@ -34,7 +35,7 @@ export function ChatView({ persona, settings }: ChatViewProps): React.JSX.Elemen
         setBusy(generating)
         setMessages(
           msgs.map(m =>
-            m.pending && !generating ? { ...m, pending: false, error: m.error ?? 'Interrupted' } : m
+            m.pending && !generating ? { ...m, pending: false, error: m.error ?? t.common.interrupted } : m
           )
         )
       }
@@ -100,7 +101,7 @@ export function ChatView({ persona, settings }: ChatViewProps): React.JSX.Elemen
   }, [persona.id])
 
   const clear = useCallback(() => {
-    if (!window.confirm(`Clear your conversation with ${persona.name}? Memories are kept.`)) return
+    if (!window.confirm(t.chat.clearConfirm(persona.name))) return
     void window.aura.clearChat(persona.id).then(() => setMessages([]))
   }, [persona.id, persona.name])
 
@@ -114,12 +115,12 @@ export function ChatView({ persona, settings }: ChatViewProps): React.JSX.Elemen
         </div>
         <div className="spacer" />
         {settings.voiceEnabled && (
-          <span className="icon-btn" title="Voice replies are on">
+          <span className="icon-btn" title={t.chat.voiceOn}>
             <SpeakerIcon />
           </span>
         )}
-        <button className="icon-btn" onClick={clear} disabled={busy} title={busy ? 'Wait for the reply to finish' : 'Clear conversation'}>
-          Clear chat
+        <button className="icon-btn" onClick={clear} disabled={busy} title={busy ? t.chat.waitToClear : t.chat.clearTitle}>
+          {t.chat.clearButton}
         </button>
       </div>
 
@@ -130,7 +131,7 @@ export function ChatView({ persona, settings }: ChatViewProps): React.JSX.Elemen
           </div>
           <h2>{persona.name}</h2>
           <p>{persona.tagline}</p>
-          <p>This is the very beginning of your conversation. Say hi!</p>
+          <p>{t.chat.empty}</p>
         </div>
       ) : (
         <div className="messages" ref={scrollRef} onScroll={onScroll}>
@@ -191,7 +192,7 @@ function MessageRow({ message, prev, persona, userName }: MessageRowProps): Reac
     !prev.error &&
     message.ts - prev.ts < GROUP_WINDOW_MS
 
-  const author = message.role === 'user' ? userName || 'You' : persona.name
+  const author = message.role === 'user' ? userName || t.common.you : persona.name
   const time = new Date(message.ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 
   return (
@@ -299,7 +300,7 @@ function Composer({ personaName, busy, onSend, onStop }: ComposerProps): React.J
             {attachments.map(a => (
               <div key={a.id} className="composer-attachment" title={a.name}>
                 <img src={a.url} alt={a.name} />
-                <button onClick={() => removeAttachment(a.id)} title="Remove image">
+                <button onClick={() => removeAttachment(a.id)} title={t.chat.removeImage}>
                   <CloseIcon size={11} />
                 </button>
               </div>
@@ -310,7 +311,7 @@ function Composer({ personaName, busy, onSend, onStop }: ComposerProps): React.J
           ref={ref}
           rows={1}
           value={text}
-          placeholder={`Message ${personaName}`}
+          placeholder={t.chat.messagePlaceholder(personaName)}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -319,20 +320,20 @@ function Composer({ personaName, busy, onSend, onStop }: ComposerProps): React.J
             }
           }}
         />
-        <button className="attach-btn" onClick={() => void addImages()} disabled={busy} title="Add images">
+        <button className="attach-btn" onClick={() => void addImages()} disabled={busy} title={t.chat.addImages}>
           <ImageIcon />
         </button>
         {busy ? (
-          <button className="stop-btn" onClick={onStop} title="Stop generating">
+          <button className="stop-btn" onClick={onStop} title={t.chat.stop}>
             <StopIcon />
           </button>
         ) : (
-          <button className={`send-btn ${text.trim() || attachments.length ? 'ready' : ''}`} onClick={submit} title="Send">
+          <button className={`send-btn ${text.trim() || attachments.length ? 'ready' : ''}`} onClick={submit} title={t.chat.send}>
             <SendIcon />
           </button>
         )}
       </div>
-      <div className="composer-hint">Enter to send · Shift+Enter for a new line · Images are copied to your AuraAi documents folder</div>
+      <div className="composer-hint">{t.chat.hint}</div>
     </div>
   )
 }

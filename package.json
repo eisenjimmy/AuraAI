@@ -1,20 +1,25 @@
 {
   "name": "aura-ai",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Aura AI — a local-first AI chat companion with personas, image chat, persistent memory, and web awareness.",
   "main": "out/main/index.js",
   "license": "MIT",
   "author": "Aura AI contributors",
-  "homepage": "https://github.com/aura-ai/aura",
+  "homepage": "https://github.com/eisenjimmy/AuraAI",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "build:ko": "AURA_EDITION=ko electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "start": "electron-vite preview",
     "llm:gemma4-v2": "scripts/start-jarvis-gemma4-v2.sh",
     "dist": "electron-vite build && electron-builder",
     "dist:mac": "electron-vite build && electron-builder --mac",
-    "dist:win": "electron-vite build && electron-builder --win"
+    "dist:win": "electron-vite build && electron-builder --win",
+    "dist:en:mac": "AURA_EDITION=en electron-vite build && electron-builder --mac",
+    "dist:en:win": "AURA_EDITION=en electron-vite build && electron-builder --win --x64 --arm64",
+    "dist:ko:mac": "AURA_EDITION=ko electron-vite build && electron-builder --mac -c.appId=app.aura.chat.ko -c.productName='Aura AI Korean' -c.artifactName='Aura AI Korean-${version}-${os}-${arch}.${ext}'",
+    "dist:ko:win": "AURA_EDITION=ko electron-vite build && electron-builder --win --x64 --arm64 -c.appId=app.aura.chat.ko -c.productName='Aura AI Korean' -c.artifactName='Aura AI Korean-${version}-${os}-${arch}.${ext}'"
   },
   "dependencies": {
     "kokoro-js": "^1.2.1"

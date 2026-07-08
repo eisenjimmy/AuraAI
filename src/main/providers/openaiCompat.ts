@@ -1,4 +1,5 @@
 import type { ChatProvider, ChatStreamOptions, ProviderContent, ProviderEvent, ProviderMessage, ToolCall } from './types'
+import { IS_KOREAN_EDITION } from '@common/edition'
 
 // One client for every OpenAI-compatible endpoint: Ollama (/v1), LM Studio,
 // llama.cpp server, and api.openai.com itself. Streaming via SSE.
@@ -67,7 +68,7 @@ export class OpenAICompatProvider implements ChatProvider {
       signal: opts.signal
     })
     if (!res.ok || !res.body) {
-      throw new Error(`Chat request failed (${res.status}): ${(await res.text()).slice(0, 300)}`)
+      throw new Error(`${IS_KOREAN_EDITION ? '채팅 요청 실패' : 'Chat request failed'} (${res.status}): ${(await res.text()).slice(0, 300)}`)
     }
 
     // Accumulate streamed tool calls by index.
@@ -106,7 +107,7 @@ export class OpenAICompatProvider implements ChatProvider {
         const { done, value } = await reader.read()
         if (done) break
         buffer += decoder.decode(value, { stream: true })
-        if (buffer.length > 4_000_000) throw new Error('Streaming response exceeded buffer limit')
+        if (buffer.length > 4_000_000) throw new Error(IS_KOREAN_EDITION ? '스트리밍 응답이 버퍼 한도를 초과했습니다' : 'Streaming response exceeded buffer limit')
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
         for (const line of lines) {
@@ -166,7 +167,7 @@ export class OpenAICompatProvider implements ChatProvider {
 
   async listModels(): Promise<string[]> {
     const res = await fetch(`${this.baseUrl}/models`, { headers: this.headers() })
-    if (!res.ok) throw new Error(`GET /models failed (${res.status})`)
+    if (!res.ok) throw new Error(`GET /models ${IS_KOREAN_EDITION ? '실패' : 'failed'} (${res.status})`)
     const json: any = await res.json()
     const ids = (json.data ?? []).map((m: any) => String(m.id))
     return ids.sort()
@@ -175,7 +176,11 @@ export class OpenAICompatProvider implements ChatProvider {
   async test(): Promise<{ ok: boolean; message: string; models?: string[] }> {
     try {
       const models = await this.listModels()
-      return { ok: true, message: `Connected. ${models.length} model(s) available.`, models }
+      return {
+        ok: true,
+        message: IS_KOREAN_EDITION ? `연결됨. 사용 가능한 모델 ${models.length}개.` : `Connected. ${models.length} model(s) available.`,
+        models
+      }
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) }
     }

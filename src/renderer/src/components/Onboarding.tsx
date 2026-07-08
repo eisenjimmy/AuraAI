@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AppSettings, Persona, ProviderId, ProviderPreset } from '@common/types'
 import { Avatar } from './Avatar'
+import { t } from '../lib/i18n'
 
 // First-run wizard: Welcome → AI provider → Your name → Pick a friend → Go.
 
@@ -96,16 +97,14 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
 
         {step === 0 && (
           <>
-            <h1>Welcome to Aura AI</h1>
+            <h1>{t.onboarding.welcomeTitle}</h1>
             <p className="lede">
-              Aura is a private AI chat companion that lives on your computer. Five friends with
-              five personalities and a memory that grows with every conversation. Your chats and
-              memories stay on this machine.
+              {t.onboarding.welcomeLead1}
             </p>
-            <p className="lede">Setup takes about a minute.</p>
+            <p className="lede">{t.onboarding.welcomeLead2}</p>
             <div className="modal-footer" style={{ border: 'none', padding: '8px 0 0' }}>
               <button className="btn primary" onClick={() => setStep(1)}>
-                Get started
+                {t.onboarding.getStarted}
               </button>
             </div>
           </>
@@ -113,10 +112,9 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
 
         {step === 1 && (
           <>
-            <h1>Choose your AI</h1>
+            <h1>{t.onboarding.providerTitle}</h1>
             <p className="lede">
-              Aura needs a language model to think with. Run one locally for free with Ollama, or
-              plug in an API key. You can change this anytime in Settings.
+              {t.onboarding.providerLead}
             </p>
             <div className="provider-cards">
               {presets.map(p => (
@@ -134,7 +132,7 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
             <div style={{ marginTop: 18 }}>
               {preset?.id === 'local' && (
                 <div className="field">
-                  <label>Server URL</label>
+                  <label>{t.onboarding.serverUrl}</label>
                   <input
                     value={draft.provider.baseUrl ?? ''}
                     onChange={e => {
@@ -144,13 +142,13 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
                     onBlur={e => fetchLocalModels(e.target.value)}
                   />
                   <div className="hint">
-                    For Jarvis Gemma 4 12B v2, run: <code>npm run llm:gemma4-v2</code>
+                    {t.onboarding.jarvisHint}<code>npm run llm:gemma4-v2</code>
                   </div>
                 </div>
               )}
               {preset?.needsApiKey && (
                 <div className="field">
-                  <label>API key</label>
+                  <label>{t.onboarding.apiKey}</label>
                   <input
                     type="password"
                     placeholder={
@@ -169,7 +167,7 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
                 </div>
               )}
               <div className="field">
-                <label>Model</label>
+                <label>{t.onboarding.model}</label>
                 {draft.provider.provider === 'local' && localModels.length > 0 ? (
                   <select
                     value={draft.provider.model}
@@ -195,7 +193,7 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
                 ) : (
                   <input
                     value={draft.provider.model}
-                    placeholder="e.g. gemma4-v2"
+                    placeholder={t.onboarding.modelPlaceholder}
                     onChange={e =>
                       setDraft(d => ({ ...d, provider: { ...d.provider, model: e.target.value } }))
                     }
@@ -203,7 +201,7 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
                 )}
               </div>
               <button className="btn" onClick={() => void testConnection()} disabled={testing}>
-                {testing ? 'Testing…' : 'Test connection'}
+                {testing ? t.common.testing : t.common.testConnection}
               </button>
               {testStatus && (
                 <div className={`status ${testStatus.ok ? 'ok' : 'err'}`}>{testStatus.message}</div>
@@ -211,9 +209,9 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
             </div>
 
             <div className="modal-footer" style={{ border: 'none', padding: '16px 0 0' }}>
-              <button className="btn ghost" onClick={() => setStep(0)}>Back</button>
+              <button className="btn ghost" onClick={() => setStep(0)}>{t.common.back}</button>
               <button className="btn primary" disabled={!canLeaveProviderStep} onClick={() => setStep(2)}>
-                Continue
+                {t.common.continue}
               </button>
             </div>
           </>
@@ -221,32 +219,31 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
 
         {step === 2 && (
           <>
-            <h1>About you</h1>
+            <h1>{t.onboarding.aboutTitle}</h1>
             <p className="lede">
-              So your friends know who they're talking to. This seeds their memory — they'll learn
-              much more as you chat.
+              {t.onboarding.aboutLead}
             </p>
             <div className="field">
-              <label>Your name</label>
+              <label>{t.onboarding.yourName}</label>
               <input
                 value={draft.userName}
-                placeholder="What should they call you?"
+                placeholder={t.onboarding.namePlaceholder}
                 onChange={e => setDraft(d => ({ ...d, userName: e.target.value }))}
               />
             </div>
             <div className="field">
-              <label>Anything they should know? (optional)</label>
+              <label>{t.onboarding.bioLabel}</label>
               <textarea
                 rows={3}
                 value={draft.userBio}
-                placeholder="I'm a nurse in Chicago, two kids, obsessed with baking…"
+                placeholder={t.onboarding.bioPlaceholder}
                 onChange={e => setDraft(d => ({ ...d, userBio: e.target.value }))}
               />
             </div>
             <div className="modal-footer" style={{ border: 'none', padding: '8px 0 0' }}>
-              <button className="btn ghost" onClick={() => setStep(1)}>Back</button>
+              <button className="btn ghost" onClick={() => setStep(1)}>{t.common.back}</button>
               <button className="btn primary" disabled={!draft.userName.trim()} onClick={() => setStep(3)}>
-                Continue
+                {t.common.continue}
               </button>
             </div>
           </>
@@ -254,8 +251,8 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
 
         {step === 3 && (
           <>
-            <h1>Who do you want to talk to first?</h1>
-            <p className="lede">All five are always in your sidebar — this just picks whose chat opens first.</p>
+            <h1>{t.onboarding.personaTitle}</h1>
+            <p className="lede">{t.onboarding.personaLead}</p>
             <div className="persona-cards">
               {personas.map(p => (
                 <button
@@ -270,9 +267,9 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
               ))}
             </div>
             <div className="modal-footer" style={{ border: 'none', padding: '16px 0 0' }}>
-              <button className="btn ghost" onClick={() => setStep(2)}>Back</button>
+              <button className="btn ghost" onClick={() => setStep(2)}>{t.common.back}</button>
               <button className="btn primary" onClick={finish}>
-                Start chatting
+                {t.onboarding.startChatting}
               </button>
             </div>
           </>

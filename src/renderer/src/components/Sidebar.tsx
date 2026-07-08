@@ -1,6 +1,7 @@
 import type { Persona } from '@common/types'
 import { Avatar } from './Avatar'
 import { GearIcon, VaultIcon } from './Icons'
+import { t } from '../lib/i18n'
 
 interface SidebarProps {
   personas: Persona[]
@@ -15,9 +16,9 @@ export function Sidebar({ personas, activeId, onSelect, onOpenSettings, onOpenMe
     <div className="sidebar">
       <div className="sidebar-header">
         <div className="logo">A</div>
-        Aura AI
+        {t.appName}
       </div>
-      <div className="sidebar-section">Friends</div>
+      <div className="sidebar-section">{t.sidebar.friends}</div>
       <div className="persona-list">
         {personas.map(p => (
           <button
@@ -34,11 +35,11 @@ export function Sidebar({ personas, activeId, onSelect, onOpenSettings, onOpenMe
         ))}
       </div>
       <div className="sidebar-footer">
-        <button onClick={onOpenMemory} title="Memory vault">
-          <VaultIcon /> Memory
+        <button onClick={onOpenMemory} title={t.sidebar.memoryTitle}>
+          <VaultIcon /> {t.sidebar.memory}
         </button>
-        <button onClick={onOpenSettings} title="Settings">
-          <GearIcon /> Settings
+        <button onClick={onOpenSettings} title={t.sidebar.settings}>
+          <GearIcon /> {t.sidebar.settings}
         </button>
       </div>
     </div>

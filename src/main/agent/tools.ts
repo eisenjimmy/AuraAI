@@ -2,6 +2,7 @@ import type { AppSettings, ActivityEvent } from '@common/types'
 import type { ChatProvider, ChatStreamOptions, ProviderMessage, ToolDefinition, ToolCall } from '../providers/types'
 import { MemoryVault, clampImportance, slugify } from '../memory/vault'
 import { webSearch, fetchPageText } from '../search/webSearch'
+import { IS_KOREAN_EDITION } from '@common/edition'
 
 // Optional "Tools mode" (Settings → Advanced, OFF by default): a small,
 // honed agentic loop where the model itself decides when to search the web,
@@ -86,14 +87,14 @@ async function executeTool(call: ToolCall, ctx: ToolContext): Promise<string> {
   switch (call.name) {
     case 'web_search': {
       const query = String(args.query ?? '')
-      ctx.onActivity({ kind: 'search', label: `Searched: ${query}` })
+      ctx.onActivity({ kind: 'search', label: IS_KOREAN_EDITION ? `검색함: ${query}` : `Searched: ${query}` })
       const results = await webSearch(query, ctx.settings, 5)
       if (results.length === 0) return JSON.stringify({ results: [], note: 'No results found.' })
       return JSON.stringify({ retrievedAt: new Date().toISOString(), results })
     }
     case 'read_webpage': {
       const url = String(args.url ?? '')
-      ctx.onActivity({ kind: 'fetch', label: `Read: ${shortUrl(url)}` })
+      ctx.onActivity({ kind: 'fetch', label: IS_KOREAN_EDITION ? `읽음: ${shortUrl(url)}` : `Read: ${shortUrl(url)}` })
       try {
         return JSON.stringify({ url, text: await fetchPageText(url) })
       } catch (err) {
@@ -117,19 +118,19 @@ async function executeTool(call: ToolCall, ctx: ToolContext): Promise<string> {
         updatedAt: now,
         source: ctx.personaId
       })
-      ctx.onActivity({ kind: 'memory-save', label: `Remembered: ${title}` })
+      ctx.onActivity({ kind: 'memory-save', label: IS_KOREAN_EDITION ? `기억함: ${title}` : `Remembered: ${title}` })
       return JSON.stringify({ saved: true, slug })
     }
     case 'recall_memories': {
       const query = String(args.query ?? '')
-      ctx.onActivity({ kind: 'memory-recall', label: `Recalled memories: ${query}` })
+      ctx.onActivity({ kind: 'memory-recall', label: IS_KOREAN_EDITION ? `기억 검색: ${query}` : `Recalled memories: ${query}` })
       const notes = await ctx.vault.recall(query, 5, ctx.provider)
       return JSON.stringify({
         memories: notes.map(n => ({ slug: n.slug, title: n.title, type: n.type, content: n.body }))
       })
     }
     default:
-      return JSON.stringify({ error: `Unknown tool: ${call.name}` })
+      return JSON.stringify({ error: IS_KOREAN_EDITION ? `알 수 없는 도구: ${call.name}` : `Unknown tool: ${call.name}` })
   }
 }
 

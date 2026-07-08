@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { MemoryNote } from '@common/types'
 import { CloseIcon } from './Icons'
+import { t } from '../lib/i18n'
 
 // Browser for the markdown memory vault: view, search, delete, and a
 // button that opens the folder itself (it's just Obsidian-style markdown).
@@ -29,28 +30,28 @@ export function MemoryPanel({ onClose }: { onClose: () => void }): React.JSX.Ele
     <div className="modal-overlay" onMouseDown={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal-header">
-          <h2>Memory vault</h2>
+          <h2>{t.memory.title}</h2>
           <button className="icon-btn" onClick={onClose}><CloseIcon /></button>
         </div>
         <div className="modal-body">
           <div className="row" style={{ marginBottom: 14 }}>
             <input
-              placeholder="Search memories…"
+              placeholder={t.memory.search}
               value={filter}
               onChange={e => setFilter(e.target.value)}
             />
             <button className="btn" style={{ flex: '0 0 auto' }} onClick={() => void window.aura.openMemoryVault()}>
-              Open folder
+              {t.memory.openFolder}
             </button>
           </div>
           <p className="hint" style={{ fontSize: 12.5, color: 'var(--text-faint)', marginBottom: 12 }}>
-            Every memory is a markdown note with wikilinks — open the folder in Obsidian to see the graph.
+            {t.memory.hint}
           </p>
           {visible.length === 0 && (
             <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>
               {notes.length === 0
-                ? 'Nothing here yet. Memories appear automatically as you chat.'
-                : 'No memories match your search.'}
+                ? t.memory.empty
+                : t.memory.noMatch}
             </p>
           )}
           {visible.map(n => (
@@ -58,7 +59,7 @@ export function MemoryPanel({ onClose }: { onClose: () => void }): React.JSX.Ele
               <div className="m-head">
                 <span className="m-title">{n.title}</span>
                 <span className="m-type">{n.type}</span>
-                <button className="m-del" onClick={() => void remove(n.slug)}>Delete</button>
+                <button className="m-del" onClick={() => void remove(n.slug)}>{t.common.delete}</button>
               </div>
               <div className="m-body">{n.body}</div>
             </div>
