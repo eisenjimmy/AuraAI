@@ -500,8 +500,7 @@ select:focus {
 
 .composer-box {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  flex-direction: column;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -510,10 +509,10 @@ select:focus {
 }
 
 .composer-attachments {
-  flex-basis: 100%;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  width: 100%;
   padding: 8px 0 4px;
 }
 
@@ -552,8 +551,17 @@ select:focus {
   border-color: var(--border-strong);
 }
 
+.composer-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
 .composer textarea {
   flex: 1;
+  min-width: 0;
   background: none;
   border: none;
   resize: none;

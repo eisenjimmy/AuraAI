@@ -1,6 +1,6 @@
 {
   "name": "aura-ai",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Aura AI — a local-first AI chat companion with personas, image chat, persistent memory, and web awareness.",
   "main": "out/main/index.js",
   "license": "MIT",

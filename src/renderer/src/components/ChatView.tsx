@@ -265,6 +265,7 @@ function Composer({ personaName, busy, onSend, onStop }: ComposerProps): React.J
   const [text, setText] = useState('')
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const ref = useRef<HTMLTextAreaElement>(null)
+  const composingRef = useRef(false)
 
   const autosize = useCallback(() => {
     const el = ref.current
@@ -285,7 +286,10 @@ function Composer({ personaName, busy, onSend, onStop }: ComposerProps): React.J
   const addImages = async (): Promise<void> => {
     if (busy) return
     const picked = await window.aura.pickChatImages()
-    if (picked.length) setAttachments(prev => [...prev, ...picked])
+    if (picked.length) {
+      setAttachments(prev => [...prev, ...picked])
+      requestAnimationFrame(() => ref.current?.focus())
+    }
   }
 
   const removeAttachment = (id: string): void => {
@@ -307,31 +311,41 @@ function Composer({ personaName, busy, onSend, onStop }: ComposerProps): React.J
             ))}
           </div>
         )}
-        <textarea
-          ref={ref}
-          rows={1}
-          value={text}
-          placeholder={t.chat.messagePlaceholder(personaName)}
-          onChange={e => setText(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              submit()
-            }
-          }}
-        />
-        <button className="attach-btn" onClick={() => void addImages()} disabled={busy} title={t.chat.addImages}>
-          <ImageIcon />
-        </button>
-        {busy ? (
-          <button className="stop-btn" onClick={onStop} title={t.chat.stop}>
-            <StopIcon />
+        <div className="composer-input-row">
+          <textarea
+            ref={ref}
+            rows={1}
+            value={text}
+            placeholder={t.chat.messagePlaceholder(personaName)}
+            onCompositionStart={() => {
+              composingRef.current = true
+            }}
+            onCompositionEnd={e => {
+              composingRef.current = false
+              setText(e.currentTarget.value)
+            }}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                if (composingRef.current || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
+                e.preventDefault()
+                submit()
+              }
+            }}
+          />
+          <button className="attach-btn" onClick={() => void addImages()} disabled={busy} title={t.chat.addImages}>
+            <ImageIcon />
           </button>
-        ) : (
-          <button className={`send-btn ${text.trim() || attachments.length ? 'ready' : ''}`} onClick={submit} title={t.chat.send}>
-            <SendIcon />
-          </button>
-        )}
+          {busy ? (
+            <button className="stop-btn" onClick={onStop} title={t.chat.stop}>
+              <StopIcon />
+            </button>
+          ) : (
+            <button className={`send-btn ${text.trim() || attachments.length ? 'ready' : ''}`} onClick={submit} title={t.chat.send}>
+              <SendIcon />
+            </button>
+          )}
+        </div>
       </div>
       <div className="composer-hint">{t.chat.hint}</div>
     </div>
