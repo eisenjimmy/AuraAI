@@ -4,7 +4,6 @@ const fs = require("fs");
 const path = require("path");
 const url = require("url");
 const crypto = require("crypto");
-const Anthropic = require("@anthropic-ai/sdk");
 const DEFAULT_PERSONAS = [
   {
     id: "nova",
@@ -692,10 +691,11 @@ const ANTHROPIC_MODELS = [
   "claude-sonnet-5",
   "claude-haiku-4-5"
 ];
+const BASE_URL = "https://api.anthropic.com/v1";
+const API_VERSION = "2023-06-01";
 class AnthropicProvider {
-  client;
   constructor(apiKey) {
-    this.client = new Anthropic({ apiKey });
+    this.apiKey = apiKey;
   }
   async *streamChat(opts) {
     const messages = [];
@@ -707,8 +707,9 @@ class AnthropicProvider {
           content: textContent$1(m.content)
         };
         const last = messages[messages.length - 1];
-        if (last?.role === "user" && Array.isArray(last.content) && last.content.every((b) => b.type === "tool_result")) {
-          last.content.push(block);
+        const lastContent = last?.content;
+        if (last?.role === "user" && Array.isArray(lastContent) && lastContent.every((b) => isTypedBlock(b, "tool_result"))) {
+          lastContent.push(block);
         } else {
           messages.push({ role: "user", content: [block] });
         }
@@ -729,56 +730,119 @@ class AnthropicProvider {
         messages.push({ role: m.role, content: anthropicContent(m.content) });
       }
     }
-    const stream = this.client.messages.stream(
-      {
-        model: opts.model,
-        max_tokens: opts.maxTokens ?? 2048,
-        system: opts.system,
-        messages,
-        ...opts.tools?.length ? {
-          tools: opts.tools.map((t) => ({
-            name: t.name,
-            description: t.description,
-            input_schema: t.parameters
-          }))
-        } : {}
-      },
-      { signal: opts.signal }
-    );
-    for await (const event of stream) {
-      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        yield { type: "text", text: event.delta.text };
-      }
-    }
-    const final = await stream.finalMessage();
-    const toolUses = final.content.filter(
-      (b) => b.type === "tool_use"
-    );
-    if (toolUses.length > 0) {
-      const calls = toolUses.map((t) => ({
-        id: t.id,
+    const body = {
+      model: opts.model,
+      max_tokens: opts.maxTokens ?? 2048,
+      system: opts.system,
+      messages,
+      stream: true
+    };
+    if (opts.tools?.length) {
+      body.tools = opts.tools.map((t) => ({
         name: t.name,
-        args: JSON.stringify(t.input ?? {})
+        description: t.description,
+        input_schema: t.parameters
       }));
+    }
+    const res = await fetch(`${BASE_URL}/messages`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(body),
+      signal: opts.signal
+    });
+    if (!res.ok || !res.body) {
+      throw new Error(`Anthropic request failed (${res.status}): ${(await res.text()).slice(0, 300)}`);
+    }
+    const toolAcc = /* @__PURE__ */ new Map();
+    const handleLine = (line) => {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) return null;
+      let json;
+      try {
+        json = JSON.parse(trimmed.slice(5).trim());
+      } catch {
+        return null;
+      }
+      if (json.type === "content_block_start" && json.content_block?.type === "tool_use") {
+        const index = Number(json.index ?? toolAcc.size);
+        toolAcc.set(index, {
+          id: String(json.content_block.id ?? `call_${index}`),
+          name: String(json.content_block.name ?? ""),
+          args: ""
+        });
+        return null;
+      }
+      if (json.type !== "content_block_delta") return null;
+      const delta = json.delta;
+      if (delta?.type === "text_delta" && typeof delta.text === "string" && delta.text.length) {
+        return { type: "text", text: delta.text };
+      }
+      if (delta?.type === "input_json_delta" && typeof delta.partial_json === "string") {
+        const index = Number(json.index ?? 0);
+        const acc = toolAcc.get(index) ?? { id: `call_${index}`, name: "", args: "" };
+        acc.args += delta.partial_json;
+        toolAcc.set(index, acc);
+      }
+      return null;
+    };
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        if (buffer.length > 4e6) throw new Error("Streaming response exceeded buffer limit");
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const ev = handleLine(line);
+          if (ev) yield ev;
+        }
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        const ev = handleLine(buffer);
+        if (ev) yield ev;
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    if (toolAcc.size > 0) {
+      const calls = [...toolAcc.entries()].sort((a, b) => a[0] - b[0]).map(([i, c]) => ({ id: c.id || `call_${i}`, name: c.name, args: c.args || "{}" }));
       yield { type: "toolCalls", calls };
     }
     yield { type: "done" };
   }
   async test() {
     try {
-      const res = await this.client.messages.create({
-        model: "claude-haiku-4-5",
-        max_tokens: 8,
-        messages: [{ role: "user", content: "ping" }]
+      const res = await fetch(`${BASE_URL}/messages`, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          model: "claude-haiku-4-5",
+          max_tokens: 8,
+          messages: [{ role: "user", content: "ping" }]
+        })
       });
+      if (!res.ok) return { ok: false, message: `Anthropic API returned ${res.status}: ${(await res.text()).slice(0, 200)}` };
+      const json = await res.json();
       return {
         ok: true,
-        message: `Connected (${res.model}).`,
+        message: `Connected (${json.model ?? "Anthropic"}).`,
         models: ANTHROPIC_MODELS
       };
     } catch (err) {
       return { ok: false, message: err instanceof Error ? err.message : String(err) };
     }
+  }
+  headers() {
+    return {
+      "Content-Type": "application/json",
+      "x-api-key": this.apiKey,
+      "anthropic-version": API_VERSION
+    };
   }
 }
 function textContent$1(content) {
@@ -798,6 +862,9 @@ function anthropicContent(content) {
       }
     };
   });
+}
+function isTypedBlock(value, type) {
+  return !!value && typeof value === "object" && value.type === type;
 }
 const GEMINI_MODELS = [
   "gemini-2.5-pro",

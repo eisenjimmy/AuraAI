@@ -1,6 +1,6 @@
 {
   "name": "aura-ai",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Aura AI — a local-first AI chat companion with personas, image chat, persistent memory, and web awareness.",
   "main": "out/main/index.js",
   "license": "MIT",
@@ -17,7 +17,6 @@
     "dist:win": "electron-vite build && electron-builder --win"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.60.0",
     "kokoro-js": "^1.2.1"
   },
   "devDependencies": {
