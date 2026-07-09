@@ -112,7 +112,15 @@ export function ChatView({ persona, settings, speechLevel, onSpeechLevel, onOpen
   return (
     <div className="chat">
       <div className="chat-header">
-        <button className="avatar-button" onClick={onOpenPersonaMemory} title={t.chat.openPersonaMemory(persona.name)}>
+        <button
+          className="avatar-button"
+          onClick={onOpenPersonaMemory}
+          onContextMenu={e => {
+            e.preventDefault()
+            onOpenPersonaMemory()
+          }}
+          title={t.chat.openPersonaMemory(persona.name)}
+        >
           <Avatar persona={persona} size={28} activityLevel={speechLevel} />
         </button>
         <div>
@@ -148,6 +156,7 @@ export function ChatView({ persona, settings, speechLevel, onSpeechLevel, onOpen
               prev={messages[i - 1]}
               persona={persona}
               userName={settings.userName}
+              onOpenPersonaMemory={onOpenPersonaMemory}
             />
           ))}
         </div>
@@ -189,9 +198,10 @@ interface MessageRowProps {
   prev?: ChatMessage
   persona: Persona
   userName: string
+  onOpenPersonaMemory: () => void
 }
 
-function MessageRow({ message, prev, persona, userName }: MessageRowProps): React.JSX.Element {
+function MessageRow({ message, prev, persona, userName, onOpenPersonaMemory }: MessageRowProps): React.JSX.Element {
   const compact =
     prev !== undefined &&
     prev.role === message.role &&
@@ -209,7 +219,17 @@ function MessageRow({ message, prev, persona, userName }: MessageRowProps): Reac
           (message.role === 'user' ? (
             <UserAvatar name={userName} />
           ) : (
-            <Avatar persona={persona} />
+            <button
+              className="avatar-button"
+              onClick={onOpenPersonaMemory}
+              onContextMenu={e => {
+                e.preventDefault()
+                onOpenPersonaMemory()
+              }}
+              title={t.chat.openPersonaMemory(persona.name)}
+            >
+              <Avatar persona={persona} />
+            </button>
           ))}
       </div>
       <div className="msg-body">

@@ -2,6 +2,7 @@ import { KokoroTTS } from 'kokoro-js'
 import type { RawAudio } from '@huggingface/transformers'
 import type { GenerateOptions } from 'kokoro-js'
 import type { VoiceSettings } from '@common/types'
+import { IS_KOREAN_EDITION } from '@common/edition'
 
 const MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX'
 const FLUSH_MIN = 35
@@ -46,6 +47,9 @@ function loadKokoro(onStatus?: StatusCallback): Promise<KokoroTTS> {
     modelPromise = KokoroTTS.from_pretrained(MODEL_ID, {
       dtype: 'q8',
       device: 'wasm'
+    }).catch(err => {
+      modelPromise = null
+      throw err
     })
   }
   return modelPromise
@@ -141,7 +145,13 @@ export class SpeechQueue {
       })
       .catch(err => {
         console.error('Kokoro TTS failed', err)
-        this.onStatus?.('error', err instanceof Error ? err.message : String(err))
+        const raw = err instanceof Error ? err.message : String(err)
+        const message = raw.toLowerCase().includes('failed to fetch')
+          ? IS_KOREAN_EDITION
+            ? 'Kokoro 음성 모델을 다운로드할 수 없습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요.'
+            : 'Kokoro voice model could not be downloaded. Check internet access, then try again.'
+          : raw
+        this.onStatus?.('error', message)
       })
   }
 

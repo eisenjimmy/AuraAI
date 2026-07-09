@@ -10,6 +10,7 @@ interface SidebarProps {
   onSelect: (id: string) => void
   onOpenSettings: () => void
   onOpenMemory: () => void
+  onOpenPersonaMemory: (persona: Persona) => void
   typingIds: Set<string>
   lastConversations: Record<string, number>
   speechLevels: Record<string, number>
@@ -21,6 +22,7 @@ export function Sidebar({
   onSelect,
   onOpenSettings,
   onOpenMemory,
+  onOpenPersonaMemory,
   typingIds,
   lastConversations,
   speechLevels
@@ -45,6 +47,10 @@ export function Sidebar({
             key={p.id}
             className={`persona-item ${p.id === activeId ? 'active' : ''}`}
             onClick={() => onSelect(p.id)}
+            onContextMenu={e => {
+              e.preventDefault()
+              onOpenPersonaMemory(p)
+            }}
           >
             <Avatar persona={p} size={34} activityLevel={speechLevels[p.id] ?? 0} />
             <div className="meta">

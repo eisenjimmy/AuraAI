@@ -32,13 +32,16 @@ You choose a persona, start a conversation, and Aura keeps the experience person
 
 - **Seven built-in personas** with different voices, profile images, and conversation styles.
 - **Image uploads in chat** so you can ask about screenshots, designs, photos, or documents.
-- **Local-first memory** saved as readable markdown notes.
-- **Kokoro text-to-speech** for local voice replies.
-- **Local LLM support** through llama.cpp, Ollama, or LM Studio.
+- **Character-specific memory** so each persona remembers only what they learned with you.
+- **Global memory** for manual facts you want every persona to share.
+- **Kokoro text-to-speech** for local voice replies, with per-persona voice settings.
+- **Beginner local LLM setup** with an in-app model downloader and llama.cpp launcher.
 - **Optional cloud providers** for OpenAI, Anthropic, and Gemini.
 - **No accounts, no telemetry, no hosted database.**
 
 ![Aura local-first visual](docs/assets/readme/local-first.png)
+
+![Aura feature overview](docs/assets/readme/feature-grid.png)
 
 ## Quick Start
 
@@ -49,7 +52,7 @@ Installers are produced with Electron Builder:
 - macOS: `.dmg` and `.zip`
 - Windows: NSIS `.exe`
 
-Release files live in the `release/` folder after a build.
+Release files are attached to GitHub Releases. Local builds write artifacts to the `release/` folder.
 
 ### Option 2: Run From Source
 
@@ -86,15 +89,17 @@ The English edition is the default when no `AURA_EDITION` flag is set.
 
 Aura talks to any OpenAI-compatible local server.
 
-The default local setup is:
+The beginner setup can download the recommended GGUF model, point Aura at it, and start a llama.cpp server from inside the app. Advanced users can skip the beginner flow and configure Ollama, LM Studio, a custom llama.cpp server, or a cloud provider manually.
+
+The recommended beginner setup is:
 
 | Setting | Default |
 |---|---|
 | Provider | Local llama.cpp |
 | URL | `http://127.0.0.1:8080/v1` |
-| Model | `gemma4-v2` |
+| Model | Gemma 4 E4B / `gemma4-v2` |
 
-This repo includes a launcher script for the Jarvis-hosted Gemma 4 v2 llama.cpp runtime used by this machine:
+This repo also includes a launcher script for the Jarvis-hosted Gemma 4 v2 llama.cpp runtime used by this machine:
 
 ```bash
 npm run llm:gemma4-v2
@@ -113,6 +118,8 @@ You can also use:
 ![Aura personas banner](docs/assets/readme/personas.png)
 
 Each persona is editable. You can change the name, tagline, system prompt, accent color, Kokoro voice, and profile image. The original generated profile pictures are preserved as defaults, so users can switch back after uploading their own.
+
+Profile images can be changed from Settings. Aura ships with the original seven generated portraits, ten additional portrait choices across Korean, European, Black, Latin, South Asian, Middle Eastern, silver-haired, and mixed-race styles, plus a user upload option.
 
 | Persona | Portrait | Personality |
 |---|---:|---|
@@ -167,7 +174,12 @@ Provider behavior:
 
 ## Memory
 
-Aura stores durable memories as markdown files, not as a hidden database.
+Aura stores durable memories as markdown files, not as a hidden database. Memory is split into two layers:
+
+- **Global memory** is the manually editable shared memory slot. It appears above Settings in the sidebar.
+- **Character memory** is isolated per persona. What you tell one persona is not automatically shown to another.
+
+You can open character memory by clicking a persona profile image in the chat header, clicking an assistant avatar in the conversation, or right-clicking a persona profile image in the friends list.
 
 Examples:
 
@@ -191,6 +203,8 @@ Each persona has:
 - A preview button in settings
 
 The first playback loads the local Kokoro model assets, so the first voice response can take longer than later responses.
+
+If the first voice playback cannot fetch the Kokoro model files, Aura now resets the failed loader so you can retry after fixing the network connection. The renderer allows Kokoro model downloads from Hugging Face model storage.
 
 ## AI Providers
 
@@ -289,7 +303,12 @@ Validation:
 - Upload an image in chat and confirm it is copied to Documents/AuraAi unless settings override it.
 - Confirm the image thumbnail renders in chat.
 - Confirm a vision-capable provider receives the image payload.
+- Confirm text input still works while image attachments are staged.
+- Confirm Korean IME text clears fully after sending.
+- Open the global memory panel from the sidebar.
+- Open character memory by clicking and right-clicking persona profile images.
 - Open Settings -> Personas and preview a Kokoro voice.
+- If Kokoro reports a fetch error, confirm network access and retry without restarting the app.
 - Do not run destructive git commands.
 - Do not mutate user data or production databases.
 ```

@@ -131,6 +131,7 @@ export default function App(): React.JSX.Element {
         onSelect={selectPersona}
         onOpenSettings={() => setShowSettings(true)}
         onOpenMemory={() => setMemoryPersona(null)}
+        onOpenPersonaMemory={persona => setMemoryPersona(persona)}
         typingIds={typingIds}
         lastConversations={lastConversations}
         speechLevels={speechLevels}
