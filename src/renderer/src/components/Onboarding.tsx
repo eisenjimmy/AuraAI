@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { AppSettings, Persona, ProviderId, ProviderPreset } from '@common/types'
 import { Avatar } from './Avatar'
 import { t } from '../lib/i18n'
+import { LocalLlmSetup } from './LocalLlmSetup'
 
 // First-run wizard: Welcome → AI provider → Your name → Pick a friend → Go.
 
@@ -131,20 +132,25 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
 
             <div style={{ marginTop: 18 }}>
               {preset?.id === 'local' && (
-                <div className="field">
-                  <label>{t.onboarding.serverUrl}</label>
-                  <input
-                    value={draft.provider.baseUrl ?? ''}
-                    onChange={e => {
-                      setTestStatus(null)
-                      setDraft(d => ({ ...d, provider: { ...d.provider, baseUrl: e.target.value } }))
-                    }}
-                    onBlur={e => fetchLocalModels(e.target.value)}
-                  />
-                  <div className="hint">
-                    {t.onboarding.jarvisHint}<code>npm run llm:gemma4-v2</code>
-                  </div>
-                </div>
+                <>
+                  <LocalLlmSetup draft={draft} onDraftChange={setDraft} />
+                  {draft.localLlm?.mode !== 'managed' && (
+                    <div className="field">
+                      <label>{t.onboarding.serverUrl}</label>
+                      <input
+                        value={draft.provider.baseUrl ?? ''}
+                        onChange={e => {
+                          setTestStatus(null)
+                          setDraft(d => ({ ...d, provider: { ...d.provider, baseUrl: e.target.value } }))
+                        }}
+                        onBlur={e => fetchLocalModels(e.target.value)}
+                      />
+                      <div className="hint">
+                        {t.onboarding.jarvisHint}<code>npm run llm:gemma4-v2</code>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
               {preset?.needsApiKey && (
                 <div className="field">

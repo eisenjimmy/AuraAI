@@ -9,6 +9,8 @@ const api = {
   pickAvatar: (personaId) => electron.ipcRenderer.invoke("personas:pickAvatar", personaId),
   pickChatImages: () => electron.ipcRenderer.invoke("images:pick"),
   chooseImageStorageFolder: () => electron.ipcRenderer.invoke("images:chooseStorageFolder"),
+  chooseLocalLlmBinary: () => electron.ipcRenderer.invoke("localLlm:pickBinary"),
+  chooseLocalLlmModel: () => electron.ipcRenderer.invoke("localLlm:pickModel"),
   getChat: (personaId) => electron.ipcRenderer.invoke("chat:get", personaId),
   clearChat: (personaId) => electron.ipcRenderer.invoke("chat:clear", personaId),
   sendMessage: (req) => electron.ipcRenderer.invoke("chat:send", req),
@@ -24,7 +26,16 @@ const api = {
   saveMemory: (note, personaId) => electron.ipcRenderer.invoke("memory:save", note, personaId),
   openMemoryVault: (personaId) => electron.ipcRenderer.invoke("memory:openVault", personaId),
   testProvider: (config) => electron.ipcRenderer.invoke("provider:test", config),
-  listLocalModels: (baseUrl) => electron.ipcRenderer.invoke("provider:localModels", baseUrl)
+  listLocalModels: (baseUrl) => electron.ipcRenderer.invoke("provider:localModels", baseUrl),
+  getLocalLlmStatus: () => electron.ipcRenderer.invoke("localLlm:status"),
+  downloadRecommendedLocalModel: () => electron.ipcRenderer.invoke("localLlm:downloadRecommended"),
+  startLocalLlm: (settings) => electron.ipcRenderer.invoke("localLlm:start", settings),
+  stopLocalLlm: () => electron.ipcRenderer.invoke("localLlm:stop"),
+  onLocalLlmStatus: (cb) => {
+    const listener = (_e, status) => cb(status);
+    electron.ipcRenderer.on("aura:localLlmStatus", listener);
+    return () => electron.ipcRenderer.removeListener("aura:localLlmStatus", listener);
+  }
 };
 electron.contextBridge.exposeInMainWorld("aura", api);
 electron.contextBridge.exposeInMainWorld("auraPresets", {

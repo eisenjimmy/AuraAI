@@ -4,6 +4,8 @@ const fs = require("fs");
 const path = require("path");
 const url = require("url");
 const crypto = require("crypto");
+const child_process = require("child_process");
+const https = require("https");
 const AURA_EDITION = "en";
 const IS_KOREAN_EDITION = AURA_EDITION === "ko";
 const APP_NAME = "Aura AI";
@@ -167,6 +169,7 @@ const DEFAULT_SETTINGS = {
   userName: "",
   userBio: "",
   provider: { provider: "local", model: "gemma4-v2", baseUrl: "http://127.0.0.1:8080/v1" },
+  localLlm: { mode: "manual", port: 8080 },
   activePersonaId: "nova",
   theme: "dark",
   voiceEnabled: false,
@@ -267,17 +270,17 @@ function saveChat(personaId, messages) {
   fs.writeFileSync(tmp, JSON.stringify(messages, null, 2), "utf8");
   fs.renameSync(tmp, file);
 }
-function appendMessage(personaId, message) {
+function appendMessage(personaId, message2) {
   const messages = loadChat(personaId);
-  messages.push(message);
+  messages.push(message2);
   saveChat(personaId, messages);
   return messages;
 }
-function updateMessage(personaId, message) {
+function updateMessage(personaId, message2) {
   const messages = loadChat(personaId);
-  const idx = messages.findIndex((m) => m.id === message.id);
+  const idx = messages.findIndex((m) => m.id === message2.id);
   if (idx < 0) return;
-  messages[idx] = message;
+  messages[idx] = message2;
   saveChat(personaId, messages);
 }
 function clearChat(personaId) {
@@ -1049,7 +1052,7 @@ const PROVIDER_PRESETS = [
     id: "local",
     label: "Local (llama.cpp)",
     description: "Free & private. Runs on your machine via Ollama, LM Studio, or llama.cpp.",
-    defaultModel: "gemma4-v2",
+    defaultModel: "gemma-4-E4B-it-Q4_K_M",
     models: [],
     needsApiKey: false,
     defaultBaseUrl: "http://127.0.0.1:8080/v1"
@@ -1159,10 +1162,10 @@ async function extractMemory(provider, model, vault, personaName, personaId, use
     })) {
       if (ev.type === "text") raw += ev.text;
     }
-    const start = raw.indexOf("{");
+    const start2 = raw.indexOf("{");
     const end = raw.lastIndexOf("}");
-    if (start < 0 || end <= start) return { saved: false };
-    const json = JSON.parse(raw.slice(start, end + 1));
+    if (start2 < 0 || end <= start2) return { saved: false };
+    const json = JSON.parse(raw.slice(start2, end + 1));
     if (!json.remember || !json.content) return { saved: false };
     const now = (/* @__PURE__ */ new Date()).toISOString();
     const targetSlug = typeof json.updates === "string" && json.updates ? slugify(json.updates) : slugify(String(json.title ?? json.content).slice(0, 50));
@@ -1325,9 +1328,9 @@ async function fetchPageText(url2, maxChars = 4e3) {
   return stripTags(body).slice(0, maxChars);
 }
 const SEARCH_TRIGGERS = /\b(today|tonight|tomorrow|yesterday|this (week|month|year|weekend)|latest|current(ly)?|right now|recent(ly)?|news|headline|score|weather|forecast|stock|price of|how much (is|does|are)|release(d| date)?|20(2[4-9]|3\d)|who won|what happened|is .{1,40} (open|out|live|dead|alive)|search (for|up)|look (it |this )?up|google)\b/i;
-function shouldSearch(message) {
-  if (message.length < 8) return false;
-  return SEARCH_TRIGGERS.test(message);
+function shouldSearch(message2) {
+  if (message2.length < 8) return false;
+  return SEARCH_TRIGGERS.test(message2);
 }
 function buildSystemPrompt(persona, settings, memories, searchResults) {
   const parts = [];
@@ -1725,17 +1728,17 @@ function buildHistory(personaId, excludeMessageId, imageMessageId) {
   while (kept.length > 0 && kept[0].role !== "user") kept.shift();
   return kept;
 }
-function messageContent(message, includeImageBytes) {
-  const attachments = message.attachments ?? [];
-  if (attachments.length === 0) return message.content;
+function messageContent(message2, includeImageBytes) {
+  const attachments = message2.attachments ?? [];
+  if (attachments.length === 0) return message2.content;
   if (!includeImageBytes) {
     const names = attachments.map((a) => a.name).join(", ");
-    return `${message.content}
+    return `${message2.content}
 
 [Attached image${attachments.length === 1 ? "" : "s"}: ${names}]`.trim();
   }
   const parts = [];
-  if (message.content.trim()) parts.push({ type: "text", text: message.content });
+  if (message2.content.trim()) parts.push({ type: "text", text: message2.content });
   for (const attachment of attachments) {
     try {
       parts.push({
@@ -1771,11 +1774,181 @@ function humanizeProviderError(err, settings) {
   }
   return raw.length > 300 ? raw.slice(0, 300) + "…" : raw;
 }
+const RECOMMENDED_MODEL = "Gemma 4 E4B Instruct GGUF";
+const RECOMMENDED_HF = "unsloth/gemma-4-E4B-it-GGUF";
+const RECOMMENDED_FILE = "gemma-4-E4B-it-Q4_K_M.gguf";
+const RECOMMENDED_URL = `https://huggingface.co/${RECOMMENDED_HF}/resolve/main/${RECOMMENDED_FILE}?download=true`;
+let processRef = null;
+let downloading = false;
+let progress;
+let message = "";
+function defaultModelPath() {
+  return path.join(dataDir(), "models", RECOMMENDED_FILE);
+}
+function localBaseUrl(settings) {
+  const port = settings?.port || 8080;
+  return `http://127.0.0.1:${port}/v1`;
+}
+function status(settings) {
+  const modelPath = settings?.modelPath || defaultModelPath();
+  const binaryPath = settings?.binaryPath || detectLlamaBinary();
+  return {
+    mode: settings?.mode || "manual",
+    running: processRef !== null && !processRef.killed,
+    pid: processRef?.pid,
+    binaryPath,
+    binaryFound: Boolean(binaryPath),
+    modelPath,
+    modelExists: fs.existsSync(modelPath),
+    modelBytes: safeSize(modelPath),
+    downloading,
+    downloadProgress: progress,
+    downloadMessage: message,
+    baseUrl: localBaseUrl(settings),
+    recommendedModel: RECOMMENDED_MODEL,
+    recommendedHf: RECOMMENDED_HF
+  };
+}
+async function downloadRecommended(settings, onStatus) {
+  const llm = normalized(settings.localLlm);
+  const dest = llm.modelPath || defaultModelPath();
+  if (fs.existsSync(dest) && safeSize(dest) > 1024 * 1024) {
+    message = "Model already downloaded.";
+    return status(llm);
+  }
+  if (downloading) return status(llm);
+  downloading = true;
+  progress = 0;
+  message = "Starting download...";
+  onStatus?.(status(llm));
+  try {
+    if (!fs.existsSync(path.dirname(dest))) fs.mkdirSync(path.dirname(dest), { recursive: true });
+    await downloadFile(RECOMMENDED_URL, dest + ".download", dest, (pct) => {
+      progress = pct;
+      message = pct !== void 0 ? `Downloading ${Math.round(pct * 100)}%` : "Downloading...";
+      onStatus?.(status(llm));
+    });
+    progress = 1;
+    message = "Download complete.";
+  } finally {
+    downloading = false;
+    onStatus?.(status(llm));
+  }
+  return status(llm);
+}
+async function start(settings) {
+  const llm = normalized(settings.localLlm);
+  if (processRef && !processRef.killed) return status(llm);
+  const binary = llm.binaryPath || detectLlamaBinary();
+  if (!binary) {
+    message = "llama.cpp executable not found. Install llama.cpp or choose llama-server in Settings.";
+    return status(llm);
+  }
+  const model = llm.modelPath || defaultModelPath();
+  if (!fs.existsSync(model)) {
+    message = "Model file is missing. Download Gemma 4 E4B first or choose a GGUF model.";
+    return status(llm);
+  }
+  const port = String(llm.port || 8080);
+  const args = path.basename(binary).includes("llama-server") ? ["-m", model, "--host", "127.0.0.1", "--port", port, "--ctx-size", "8192", "--n-gpu-layers", "999"] : ["serve", "-m", model, "--host", "127.0.0.1", "--port", port, "--ctx-size", "8192", "--n-gpu-layers", "999"];
+  processRef = child_process.spawn(binary, args, {
+    cwd: path.dirname(model),
+    env: { ...process.env, LLAMA_CACHE: path.join(dataDir(), "models") }
+  });
+  message = "Starting llama.cpp...";
+  processRef.stdout.on("data", (data) => {
+    const text = String(data);
+    if (text.trim()) message = text.trim().slice(-240);
+  });
+  processRef.stderr.on("data", (data) => {
+    const text = String(data);
+    if (text.trim()) message = text.trim().slice(-240);
+  });
+  processRef.once("exit", (code) => {
+    processRef = null;
+    message = code === 0 ? "llama.cpp stopped." : `llama.cpp exited with code ${code ?? "unknown"}.`;
+  });
+  return status(llm);
+}
+async function stop(settings) {
+  if (processRef && !processRef.killed) processRef.kill();
+  processRef = null;
+  message = "llama.cpp stopped.";
+  return status(settings);
+}
+function normalized(settings) {
+  return { mode: settings?.mode || "manual", port: settings?.port || 8080, binaryPath: settings?.binaryPath, modelPath: settings?.modelPath };
+}
+function detectLlamaBinary() {
+  const resourceDir = typeof process.resourcesPath === "string" ? process.resourcesPath : "";
+  const bundled = [
+    path.join(resourceDir, "llama", "llama-server"),
+    path.join(resourceDir, "llama-server"),
+    path.join(electron.app.getAppPath(), "llama", "llama-server")
+  ];
+  for (const file of bundled) if (file && fs.existsSync(file)) return file;
+  for (const name of ["llama-server", "llama"]) {
+    const found = child_process.spawnSync("which", [name], { encoding: "utf8" }).stdout.trim();
+    if (found) return found;
+  }
+  return void 0;
+}
+function safeSize(file) {
+  try {
+    return fs.statSync(file).size;
+  } catch {
+    return 0;
+  }
+}
+function downloadFile(url2, tmp, dest, onProgress, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url2, (res) => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode ?? 0) && res.headers.location && redirects < 5) {
+        res.resume();
+        downloadFile(new URL(res.headers.location, url2).toString(), tmp, dest, onProgress, redirects + 1).then(resolve, reject);
+        return;
+      }
+      if ((res.statusCode ?? 500) >= 400) {
+        res.resume();
+        reject(new Error(`Download failed (${res.statusCode})`));
+        return;
+      }
+      const total = Number(res.headers["content-length"] ?? 0);
+      let done = 0;
+      const out = fs.createWriteStream(tmp);
+      res.on("data", (chunk) => {
+        done += chunk.length;
+        onProgress(total > 0 ? done / total : void 0);
+      });
+      res.pipe(out);
+      out.on("finish", () => {
+        out.close(() => {
+          try {
+            fs.renameSync(tmp, dest);
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        });
+      });
+      out.on("error", (err) => {
+        try {
+          fs.unlinkSync(tmp);
+        } catch {
+        }
+        reject(err);
+      });
+    });
+    req.on("error", reject);
+  });
+}
 const uiText = {
   chooseProfileImage: "Choose a profile image",
   addImages: "Add images",
   imageFilter: "Images",
-  chooseImageFolder: "Choose image storage folder"
+  chooseImageFolder: "Choose image storage folder",
+  chooseLlamaBinary: "Choose llama.cpp executable",
+  chooseGgufModel: "Choose GGUF model"
 };
 function registerIpc(getWindow) {
   const pipeline = new ChatPipeline(
@@ -1846,6 +2019,27 @@ function registerIpc(getWindow) {
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];
   });
+  electron.ipcMain.handle("localLlm:pickBinary", async () => {
+    const win = getWindow();
+    if (!win) return null;
+    const result = await electron.dialog.showOpenDialog(win, {
+      title: uiText.chooseLlamaBinary,
+      properties: ["openFile"]
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
+  electron.ipcMain.handle("localLlm:pickModel", async () => {
+    const win = getWindow();
+    if (!win) return null;
+    const result = await electron.dialog.showOpenDialog(win, {
+      title: uiText.chooseGgufModel,
+      filters: [{ name: "GGUF", extensions: ["gguf"] }],
+      properties: ["openFile"]
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    return result.filePaths[0];
+  });
   electron.ipcMain.handle("chat:get", (_e, personaId) => loadChat(personaId));
   electron.ipcMain.handle("chat:clear", (_e, personaId) => clearChat(personaId));
   electron.ipcMain.handle("chat:send", async (_e, req) => {
@@ -1882,7 +2076,23 @@ function registerIpc(getWindow) {
       return [];
     }
   });
+  electron.ipcMain.handle("localLlm:status", () => status(loadSettings().localLlm));
+  electron.ipcMain.handle("localLlm:downloadRecommended", async () => {
+    return downloadRecommended(loadSettings(), (s) => getWindow()?.webContents.send("aura:localLlmStatus", s));
+  });
+  electron.ipcMain.handle("localLlm:start", async (_e, patch) => {
+    if (patch) {
+      const settings2 = loadSettings();
+      saveSettings({ ...settings2, localLlm: patch });
+    }
+    const settings = loadSettings();
+    return start(settings);
+  });
+  electron.ipcMain.handle("localLlm:stop", async () => stop(loadSettings().localLlm));
   electron.ipcMain.handle("app:version", () => electron.app.getVersion());
+  electron.app.on("before-quit", () => {
+    void stop(loadSettings().localLlm);
+  });
 }
 function imageUrl(filePath) {
   return `aura-image://a/${encodeURIComponent(Buffer.from(filePath, "utf8").toString("base64url"))}`;

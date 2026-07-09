@@ -41,6 +41,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   userName: '',
   userBio: '',
   provider: { provider: 'local', model: 'gemma4-v2', baseUrl: 'http://127.0.0.1:8080/v1' },
+  localLlm: { mode: 'manual', port: 8080 },
   activePersonaId: 'nova',
   theme: 'dark',
   voiceEnabled: false,

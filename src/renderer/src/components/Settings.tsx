@@ -5,6 +5,7 @@ import { KOKORO_VOICES, SpeechQueue, normalizeForSpeech } from '../lib/voice'
 import { DEFAULT_AVATAR_CHOICES, defaultAvatarIdForPersona } from '../lib/avatarAssets'
 import { CloseIcon, PlayIcon } from './Icons'
 import { t } from '../lib/i18n'
+import { LocalLlmSetup } from './LocalLlmSetup'
 
 interface SettingsProps {
   settings: AppSettings
@@ -107,14 +108,19 @@ function ProviderTab({ settings, onSettingsSaved }: SettingsProps): React.JSX.El
       </div>
       <div style={{ marginTop: 16 }}>
         {preset?.id === 'local' && (
-          <div className="field">
-            <label>{t.settings.serverUrl}</label>
-            <input
-              value={draft.provider.baseUrl ?? ''}
-              onChange={e => setDraft(d => ({ ...d, provider: { ...d.provider, baseUrl: e.target.value } }))}
-            />
-            <div className="hint">{t.settings.serverHint}</div>
-          </div>
+          <>
+            <LocalLlmSetup draft={draft} onDraftChange={setDraft} onSave={onSettingsSaved} />
+            {draft.localLlm?.mode !== 'managed' && (
+              <div className="field">
+                <label>{t.settings.serverUrl}</label>
+                <input
+                  value={draft.provider.baseUrl ?? ''}
+                  onChange={e => setDraft(d => ({ ...d, provider: { ...d.provider, baseUrl: e.target.value } }))}
+                />
+                <div className="hint">{t.settings.serverHint}</div>
+              </div>
+            )}
+          </>
         )}
         {preset?.needsApiKey && (
           <div className="field">

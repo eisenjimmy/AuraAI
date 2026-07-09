@@ -25,6 +25,34 @@ export interface ProviderPreset {
   defaultBaseUrl?: string
 }
 
+export interface LocalLlmSettings {
+  /** managed = Aura starts llama.cpp; manual = user supplies their own endpoint. */
+  mode: 'managed' | 'manual'
+  /** Path to llama-server or llama executable. Empty = auto-detect/bundled if present. */
+  binaryPath?: string
+  /** GGUF model path for managed mode. Empty = Aura's default app data model path. */
+  modelPath?: string
+  /** localhost port for managed llama.cpp. */
+  port: number
+}
+
+export interface LocalLlmStatus {
+  mode: 'managed' | 'manual'
+  running: boolean
+  pid?: number
+  binaryPath?: string
+  binaryFound: boolean
+  modelPath: string
+  modelExists: boolean
+  modelBytes: number
+  downloading: boolean
+  downloadProgress?: number
+  downloadMessage?: string
+  baseUrl: string
+  recommendedModel: string
+  recommendedHf: string
+}
+
 // ---------- Personas ----------
 
 export interface VoiceSettings {
@@ -110,6 +138,8 @@ export interface AppSettings {
   /** Free-form "about me" the user gave during onboarding. */
   userBio: string
   provider: ProviderConfig
+  /** Optional beginner local LLM setup; manual users can ignore this. */
+  localLlm?: LocalLlmSettings
   /** Persona id that opens on launch. */
   activePersonaId: string
   theme: 'dark' | 'light'
@@ -164,6 +194,8 @@ export interface AuraApi {
   pickAvatar(personaId: string): Promise<string | null>
   pickChatImages(): Promise<ChatAttachment[]>
   chooseImageStorageFolder(): Promise<string | null>
+  chooseLocalLlmBinary(): Promise<string | null>
+  chooseLocalLlmModel(): Promise<string | null>
 
   getChat(personaId: string): Promise<ChatMessage[]>
   clearChat(personaId: string): Promise<void>
@@ -180,4 +212,10 @@ export interface AuraApi {
 
   testProvider(config: ProviderConfig): Promise<TestProviderResult>
   listLocalModels(baseUrl: string): Promise<string[]>
+
+  getLocalLlmStatus(): Promise<LocalLlmStatus>
+  downloadRecommendedLocalModel(): Promise<LocalLlmStatus>
+  startLocalLlm(settings?: LocalLlmSettings): Promise<LocalLlmStatus>
+  stopLocalLlm(): Promise<LocalLlmStatus>
+  onLocalLlmStatus(cb: (status: LocalLlmStatus) => void): () => void
 }

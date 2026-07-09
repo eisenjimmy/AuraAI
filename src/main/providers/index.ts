@@ -14,7 +14,7 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     description: IS_KOREAN_EDITION
       ? '무료와 프라이버시. Ollama, LM Studio, llama.cpp로 내 컴퓨터에서 실행합니다.'
       : 'Free & private. Runs on your machine via Ollama, LM Studio, or llama.cpp.',
-    defaultModel: 'gemma4-v2',
+    defaultModel: 'gemma-4-E4B-it-Q4_K_M',
     models: [],
     needsApiKey: false,
     defaultBaseUrl: 'http://127.0.0.1:8080/v1'

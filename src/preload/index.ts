@@ -10,6 +10,8 @@ const api: AuraApi = {
   pickAvatar: personaId => ipcRenderer.invoke('personas:pickAvatar', personaId),
   pickChatImages: () => ipcRenderer.invoke('images:pick'),
   chooseImageStorageFolder: () => ipcRenderer.invoke('images:chooseStorageFolder'),
+  chooseLocalLlmBinary: () => ipcRenderer.invoke('localLlm:pickBinary'),
+  chooseLocalLlmModel: () => ipcRenderer.invoke('localLlm:pickModel'),
 
   getChat: personaId => ipcRenderer.invoke('chat:get', personaId),
   clearChat: personaId => ipcRenderer.invoke('chat:clear', personaId),
@@ -28,7 +30,17 @@ const api: AuraApi = {
   openMemoryVault: personaId => ipcRenderer.invoke('memory:openVault', personaId),
 
   testProvider: config => ipcRenderer.invoke('provider:test', config),
-  listLocalModels: baseUrl => ipcRenderer.invoke('provider:localModels', baseUrl)
+  listLocalModels: baseUrl => ipcRenderer.invoke('provider:localModels', baseUrl),
+
+  getLocalLlmStatus: () => ipcRenderer.invoke('localLlm:status'),
+  downloadRecommendedLocalModel: () => ipcRenderer.invoke('localLlm:downloadRecommended'),
+  startLocalLlm: settings => ipcRenderer.invoke('localLlm:start', settings),
+  stopLocalLlm: () => ipcRenderer.invoke('localLlm:stop'),
+  onLocalLlmStatus: cb => {
+    const listener = (_e: unknown, status: Parameters<typeof cb>[0]): void => cb(status)
+    ipcRenderer.on('aura:localLlmStatus', listener)
+    return () => ipcRenderer.removeListener('aura:localLlmStatus', listener)
+  }
 }
 
 contextBridge.exposeInMainWorld('aura', api)

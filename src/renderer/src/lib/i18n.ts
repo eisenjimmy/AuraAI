@@ -114,6 +114,24 @@ export const t = IS_KOREAN_EDITION
           'British English': '영국 영어'
         }
       },
+      localLlm: {
+        beginnerTitle: '초보자용 로컬 설치',
+        beginnerDesc: '아우라가 Gemma 4 E4B 모델과 llama.cpp 서버를 사용합니다.',
+        manualTitle: '직접 설정',
+        manualDesc: 'Ollama, LM Studio, 기존 llama.cpp 서버 또는 API를 직접 연결합니다.',
+        recommendation: (model: string, hf: string) => `추천: ${model}. Hugging Face: ${hf}. 모델은 내 컴퓨터에 저장되고 로컬 서버로 실행됩니다.`,
+        download: '추천 모델 다운로드',
+        downloading: (pct: string) => `다운로드 중${pct}`,
+        start: '로컬 LLM 시작',
+        stop: '로컬 LLM 중지',
+        llamaBinary: 'llama.cpp 실행 파일',
+        modelFile: 'GGUF 모델 파일',
+        port: '포트',
+        binaryFound: 'llama.cpp 실행 파일을 찾았습니다.',
+        binaryMissing: '번들된 llama.cpp가 없으면 llama-server를 설치하거나 직접 선택하세요.',
+        modelReady: (size: string) => `모델 준비됨 (${size})`,
+        modelMissing: '모델이 아직 없습니다. 추천 모델을 다운로드하거나 GGUF 파일을 선택하세요.'
+      },
       avatars: {
         choices: {
           'default:nova': '하나 기본',
@@ -261,6 +279,24 @@ export const t = IS_KOREAN_EDITION
           'American English': 'American English',
           'British English': 'British English'
         }
+      },
+      localLlm: {
+        beginnerTitle: 'Beginner local setup',
+        beginnerDesc: 'Aura uses Gemma 4 E4B and starts a llama.cpp server for you.',
+        manualTitle: 'Configure my own',
+        manualDesc: 'Use Ollama, LM Studio, an existing llama.cpp server, or an API provider.',
+        recommendation: (model: string, hf: string) => `Recommended: ${model}. Hugging Face: ${hf}. The model is stored on this computer and served locally.`,
+        download: 'Download recommended model',
+        downloading: (pct: string) => `Downloading${pct}`,
+        start: 'Start local LLM',
+        stop: 'Stop local LLM',
+        llamaBinary: 'llama.cpp executable',
+        modelFile: 'GGUF model file',
+        port: 'Port',
+        binaryFound: 'llama.cpp executable found.',
+        binaryMissing: 'If Aura has no bundled llama.cpp, install llama-server or choose the executable manually.',
+        modelReady: (size: string) => `Model ready (${size})`,
+        modelMissing: 'No model yet. Download the recommendation or choose a GGUF file.'
       },
       avatars: {
         choices: {

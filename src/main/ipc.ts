@@ -10,19 +10,24 @@ import { createProvider, PROVIDER_PRESETS } from './providers'
 import { OpenAICompatProvider } from './providers/openaiCompat'
 import { ChatPipeline } from './agent/pipeline'
 import { IS_KOREAN_EDITION } from '@common/edition'
+import * as localLlm from './localLlm'
 
 const uiText = IS_KOREAN_EDITION
   ? {
       chooseProfileImage: '프로필 이미지 선택',
       addImages: '이미지 추가',
       imageFilter: '이미지',
-      chooseImageFolder: '이미지 저장 폴더 선택'
+      chooseImageFolder: '이미지 저장 폴더 선택',
+      chooseLlamaBinary: 'llama.cpp 실행 파일 선택',
+      chooseGgufModel: 'GGUF 모델 선택'
     }
   : {
       chooseProfileImage: 'Choose a profile image',
       addImages: 'Add images',
       imageFilter: 'Images',
-      chooseImageFolder: 'Choose image storage folder'
+      chooseImageFolder: 'Choose image storage folder',
+      chooseLlamaBinary: 'Choose llama.cpp executable',
+      chooseGgufModel: 'Choose GGUF model'
     }
 
 export function registerIpc(getWindow: () => BrowserWindow | null): void {
@@ -105,6 +110,29 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     return result.filePaths[0]
   })
 
+  ipcMain.handle('localLlm:pickBinary', async (): Promise<string | null> => {
+    const win = getWindow()
+    if (!win) return null
+    const result = await dialog.showOpenDialog(win, {
+      title: uiText.chooseLlamaBinary,
+      properties: ['openFile']
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
+
+  ipcMain.handle('localLlm:pickModel', async (): Promise<string | null> => {
+    const win = getWindow()
+    if (!win) return null
+    const result = await dialog.showOpenDialog(win, {
+      title: uiText.chooseGgufModel,
+      filters: [{ name: 'GGUF', extensions: ['gguf'] }],
+      properties: ['openFile']
+    })
+    if (result.canceled || result.filePaths.length === 0) return null
+    return result.filePaths[0]
+  })
+
   // ---------- chat ----------
   ipcMain.handle('chat:get', (_e, personaId: string) => loadChat(personaId))
   ipcMain.handle('chat:clear', (_e, personaId: string) => clearChat(personaId))
@@ -148,7 +176,25 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
     }
   })
 
+  ipcMain.handle('localLlm:status', () => localLlm.status(loadSettings().localLlm))
+  ipcMain.handle('localLlm:downloadRecommended', async () => {
+    return localLlm.downloadRecommended(loadSettings(), s => getWindow()?.webContents.send('aura:localLlmStatus', s))
+  })
+  ipcMain.handle('localLlm:start', async (_e, patch?: AppSettings['localLlm']) => {
+    if (patch) {
+      const settings = loadSettings()
+      saveSettings({ ...settings, localLlm: patch })
+    }
+    const settings = loadSettings()
+    return localLlm.start(settings)
+  })
+  ipcMain.handle('localLlm:stop', async () => localLlm.stop(loadSettings().localLlm))
+
   ipcMain.handle('app:version', () => app.getVersion())
+
+  app.on('before-quit', () => {
+    void localLlm.stop(loadSettings().localLlm)
+  })
 }
 
 export function imageUrl(filePath: string): string {
