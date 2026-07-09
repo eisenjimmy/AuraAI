@@ -25,7 +25,7 @@ export function Avatar({ persona, size = 40, activityLevel = 0 }: { persona: Per
   )
 }
 
-export function UserAvatar({ name, size = 40 }: { name: string; size?: number }): React.JSX.Element {
+export function UserAvatar({ name, avatar, size = 40 }: { name: string; avatar?: string; size?: number }): React.JSX.Element {
   const style: React.CSSProperties = {
     width: size,
     height: size,
@@ -41,7 +41,11 @@ export function UserAvatar({ name, size = 40 }: { name: string; size?: number })
       aria-label={name || 'You'}
       title={name || 'You'}
     >
-      <PersonIcon size={Math.max(16, Math.round(size * 0.52))} />
+      {avatar ? (
+        <img src={avatar} alt="" className="avatar-img" />
+      ) : (
+        <PersonIcon size={Math.max(16, Math.round(size * 0.52))} />
+      )}
     </div>
   )
 }

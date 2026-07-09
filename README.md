@@ -32,6 +32,7 @@ You choose a persona, start a conversation, and Aura keeps the experience person
 
 - **Seven built-in personas** with different voices, profile images, and conversation styles.
 - **Image uploads in chat** so you can ask about screenshots, designs, photos, or documents.
+- **User profile photo upload** in onboarding and Settings, shown beside your own messages.
 - **Character-specific memory** so each persona remembers only what they learned with you.
 - **Global memory** for manual facts you want every persona to share.
 - **Kokoro text-to-speech** for local voice replies, with per-persona voice settings.
@@ -224,6 +225,7 @@ Aura is intentionally boring about data:
 | Data | Local location |
 |---|---|
 | Settings and API keys | App config JSON |
+| User profile photo | App data `avatars/` folder |
 | Persona edits | `personas.json` |
 | Chats | `chats/<persona>.json` |
 | Memories | Markdown files in the memory vault |

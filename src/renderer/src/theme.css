@@ -825,6 +825,57 @@ select:focus {
   flex: 1;
 }
 
+.row.compact {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.row.compact > * {
+  flex: 0 0 auto;
+}
+
+.profile-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.profile-photo-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-photo-meta .row {
+  margin-top: 8px;
+}
+
+.profile-photo-preview {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  box-shadow:
+    0 2px 7px rgba(0, 0, 0, 0.28),
+    0 0 5px color-mix(in srgb, currentColor 24%, transparent);
+}
+
+.profile-photo-preview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.profile-photo-preview span {
+  font-weight: 700;
+}
+
 /* toggle */
 .toggle-row {
   display: flex;

@@ -39,6 +39,7 @@ function writeJson(file: string, value: unknown): void {
 export const DEFAULT_SETTINGS: AppSettings = {
   onboarded: false,
   userName: '',
+  userAvatar: '',
   userBio: '',
   provider: { provider: 'local', model: 'gemma4-v2', baseUrl: 'http://127.0.0.1:8080/v1' },
   localLlm: { mode: 'manual', port: 8080 },

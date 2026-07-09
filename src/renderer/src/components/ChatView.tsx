@@ -156,6 +156,7 @@ export function ChatView({ persona, settings, speechLevel, onSpeechLevel, onOpen
               prev={messages[i - 1]}
               persona={persona}
               userName={settings.userName}
+              userAvatar={settings.userAvatar}
               onOpenPersonaMemory={onOpenPersonaMemory}
             />
           ))}
@@ -198,10 +199,11 @@ interface MessageRowProps {
   prev?: ChatMessage
   persona: Persona
   userName: string
+  userAvatar?: string
   onOpenPersonaMemory: () => void
 }
 
-function MessageRow({ message, prev, persona, userName, onOpenPersonaMemory }: MessageRowProps): React.JSX.Element {
+function MessageRow({ message, prev, persona, userName, userAvatar, onOpenPersonaMemory }: MessageRowProps): React.JSX.Element {
   const compact =
     prev !== undefined &&
     prev.role === message.role &&
@@ -217,7 +219,7 @@ function MessageRow({ message, prev, persona, userName, onOpenPersonaMemory }: M
       <div className="msg-gutter">
         {!compact &&
           (message.role === 'user' ? (
-            <UserAvatar name={userName} />
+            <UserAvatar name={userName} avatar={userAvatar} />
           ) : (
             <button
               className="avatar-button"

@@ -83,6 +83,11 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
     onComplete({ ...draft, onboarded: true })
   }
 
+  const chooseUserAvatar = async (): Promise<void> => {
+    const avatar = await window.aura.pickAvatar('user')
+    if (avatar) setDraft(d => ({ ...d, userAvatar: avatar }))
+  }
+
   const canLeaveProviderStep =
     draft.provider.model.trim().length > 0 &&
     (!preset?.needsApiKey || (draft.provider.apiKey ?? '').trim().length > 0)
@@ -229,6 +234,21 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
             <p className="lede">
               {t.onboarding.aboutLead}
             </p>
+            <div className="profile-photo-row">
+              <UserPhotoPreview name={draft.userName} avatar={draft.userAvatar} />
+              <div className="profile-photo-meta">
+                <label>{t.onboarding.profilePhoto}</label>
+                <div className="hint">{t.onboarding.profilePhotoHint}</div>
+                <div className="row compact">
+                  <button className="btn" onClick={() => void chooseUserAvatar()}>{t.settings.uploadImage}</button>
+                  {draft.userAvatar && (
+                    <button className="btn ghost" onClick={() => setDraft(d => ({ ...d, userAvatar: '' }))}>
+                      {t.settings.removeImage}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
             <div className="field">
               <label>{t.onboarding.yourName}</label>
               <input
@@ -281,6 +301,14 @@ export function Onboarding({ settings, personas, onComplete }: OnboardingProps):
           </>
         )}
       </div>
+    </div>
+  )
+}
+
+function UserPhotoPreview({ name, avatar }: { name: string; avatar?: string }): React.JSX.Element {
+  return (
+    <div className="profile-photo-preview" aria-label={name || t.common.you} title={name || t.common.you}>
+      {avatar ? <img src={avatar} alt="" /> : <span>{(name.trim()[0] || t.common.you[0] || 'U').toUpperCase()}</span>}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { AppSettings, Persona, ProviderId, ProviderPreset, VoiceSettings } from '@common/types'
-import { Avatar } from './Avatar'
+import { Avatar, UserAvatar } from './Avatar'
 import { KOKORO_VOICES, SpeechQueue, normalizeForSpeech } from '../lib/voice'
 import { DEFAULT_AVATAR_CHOICES, defaultAvatarIdForPersona } from '../lib/avatarAssets'
 import { CloseIcon, PlayIcon } from './Icons'
@@ -371,8 +371,30 @@ function ChatTab({ settings, onSettingsSaved }: SettingsProps): React.JSX.Elemen
     if (folder) update({ imageStoragePath: folder })
   }
 
+  const chooseUserAvatar = async (): Promise<void> => {
+    const avatar = await window.aura.pickAvatar('user')
+    if (avatar) update({ userAvatar: avatar })
+  }
+
   return (
     <>
+      <div className="field">
+        <label>{t.settings.userProfilePhoto}</label>
+        <div className="profile-photo-row">
+          <UserAvatar name={draft.userName} avatar={draft.userAvatar} size={54} />
+          <div className="profile-photo-meta">
+            <div className="hint">{t.settings.userProfilePhotoHint}</div>
+            <div className="row compact">
+              <button className="btn" onClick={() => void chooseUserAvatar()}>{t.settings.uploadImage}</button>
+              {draft.userAvatar && (
+                <button className="btn ghost" onClick={() => update({ userAvatar: '' })}>
+                  {t.settings.removeImage}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
       <div className="row" style={{ marginBottom: 4 }}>
         <div className="field">
           <label>{t.settings.yourName}</label>

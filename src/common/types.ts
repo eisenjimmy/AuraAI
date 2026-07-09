@@ -135,6 +135,8 @@ export interface MemoryNote {
 export interface AppSettings {
   onboarded: boolean
   userName: string
+  /** Optional user-uploaded profile image shown for user chat bubbles. */
+  userAvatar?: string
   /** Free-form "about me" the user gave during onboarding. */
   userBio: string
   provider: ProviderConfig
