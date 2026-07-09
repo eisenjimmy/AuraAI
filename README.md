@@ -205,7 +205,7 @@ Each persona has:
 
 The first playback loads the local Kokoro model assets, so the first voice response can take longer than later responses.
 
-If the first voice playback cannot fetch the Kokoro model files, Aura now resets the failed loader so you can retry after fixing the network connection. The renderer allows Kokoro model downloads from Hugging Face model storage.
+Kokoro model files and supported voice binaries are bundled with the app and served through Aura's internal `aura-kokoro://` asset service. Voice preview and speech replies no longer require a first-run Hugging Face download. When Voice replies are enabled, Aura warms the local Kokoro runtime at startup and again the first time the setting is toggled on.
 
 ## AI Providers
 

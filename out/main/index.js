@@ -2125,9 +2125,13 @@ if (!electron.app.requestSingleInstanceLock()) {
 }
 electron.protocol.registerSchemesAsPrivileged([
   { scheme: "aura-avatar", privileges: { standard: false, secure: true, supportFetchAPI: true } },
-  { scheme: "aura-image", privileges: { standard: false, secure: true, supportFetchAPI: true } }
+  { scheme: "aura-image", privileges: { standard: false, secure: true, supportFetchAPI: true } },
+  { scheme: "aura-kokoro", privileges: { standard: true, secure: true, supportFetchAPI: true } }
 ]);
 const DEV_URL = !electron.app.isPackaged ? process.env["ELECTRON_RENDERER_URL"] : void 0;
+function kokoroModelDir() {
+  return electron.app.isPackaged ? path.join(process.resourcesPath, "kokoro-model") : path.join(electron.app.getAppPath(), "resources", "kokoro-model");
+}
 function createWindow() {
   const iconPath = path.join(__dirname, "../../build/icon.png");
   mainWindow = new electron.BrowserWindow({
@@ -2180,6 +2184,18 @@ electron.app.whenReady().then(() => {
       return new Response("Unsupported image type", { status: 415 });
     }
     return electron.net.fetch(url.pathToFileURL(file).toString());
+  });
+  electron.protocol.handle("aura-kokoro", (request) => {
+    const url$1 = new URL(request.url);
+    const parts = decodeURIComponent(url$1.pathname.replace(/^\/+/, "")).split("/").filter(Boolean);
+    const ext = path.extname(parts.at(-1) ?? "").toLowerCase();
+    if (![".json", ".onnx", ".bin"].includes(ext)) {
+      return new Response("Unsupported Kokoro asset type", { status: 415 });
+    }
+    if (parts.some((part) => part === ".." || part.includes("\\"))) {
+      return new Response("Bad Kokoro asset path", { status: 400 });
+    }
+    return electron.net.fetch(url.pathToFileURL(path.join(kokoroModelDir(), ...parts)).toString());
   });
   registerIpc(() => mainWindow);
   createWindow();

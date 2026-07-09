@@ -6,6 +6,7 @@ import { Onboarding } from './components/Onboarding'
 import { SettingsModal } from './components/Settings'
 import { MemoryPanel } from './components/MemoryPanel'
 import { t } from './lib/i18n'
+import { warmKokoro } from './lib/voice'
 import { AURA_EDITION } from '@common/edition'
 
 export default function App(): React.JSX.Element {
@@ -70,6 +71,11 @@ export default function App(): React.JSX.Element {
     document.documentElement.lang = AURA_EDITION === 'ko' ? 'ko' : 'en'
     document.title = t.appName
   }, [settings?.theme])
+
+  useEffect(() => {
+    if (!settings?.voiceEnabled) return
+    void warmKokoro().catch(err => console.error('Kokoro warmup failed', err))
+  }, [settings?.voiceEnabled])
 
   const saveSettings = useCallback((next: AppSettings) => {
     setSettings(next)

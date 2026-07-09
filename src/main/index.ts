@@ -26,10 +26,15 @@ if (!app.requestSingleInstanceLock()) {
 // dedicated scheme so the renderer never needs file:// access.
 protocol.registerSchemesAsPrivileged([
   { scheme: 'aura-avatar', privileges: { standard: false, secure: true, supportFetchAPI: true } },
-  { scheme: 'aura-image', privileges: { standard: false, secure: true, supportFetchAPI: true } }
+  { scheme: 'aura-image', privileges: { standard: false, secure: true, supportFetchAPI: true } },
+  { scheme: 'aura-kokoro', privileges: { standard: true, secure: true, supportFetchAPI: true } }
 ])
 
 const DEV_URL = !app.isPackaged ? process.env['ELECTRON_RENDERER_URL'] : undefined
+
+function kokoroModelDir(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'kokoro-model') : join(app.getAppPath(), 'resources', 'kokoro-model')
+}
 
 function createWindow(): void {
   const iconPath = join(__dirname, '../../build/icon.png')
@@ -94,6 +99,20 @@ app.whenReady().then(() => {
       return new Response('Unsupported image type', { status: 415 })
     }
     return net.fetch(pathToFileURL(file).toString())
+  })
+
+  protocol.handle('aura-kokoro', request => {
+    // aura-kokoro://models/<model-id>/<asset>
+    const url = new URL(request.url)
+    const parts = decodeURIComponent(url.pathname.replace(/^\/+/, '')).split('/').filter(Boolean)
+    const ext = extname(parts.at(-1) ?? '').toLowerCase()
+    if (!['.json', '.onnx', '.bin'].includes(ext)) {
+      return new Response('Unsupported Kokoro asset type', { status: 415 })
+    }
+    if (parts.some(part => part === '..' || part.includes('\\'))) {
+      return new Response('Bad Kokoro asset path', { status: 400 })
+    }
+    return net.fetch(pathToFileURL(join(kokoroModelDir(), ...parts)).toString())
   })
 
   registerIpc(() => mainWindow)

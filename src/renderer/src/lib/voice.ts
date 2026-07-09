@@ -1,10 +1,12 @@
 import { KokoroTTS } from 'kokoro-js'
-import type { RawAudio } from '@huggingface/transformers'
+import { env as transformersEnv, type RawAudio } from '@huggingface/transformers'
 import type { GenerateOptions } from 'kokoro-js'
 import type { VoiceSettings } from '@common/types'
 import { IS_KOREAN_EDITION } from '@common/edition'
 
 const MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX'
+const LOCAL_MODEL_BASE = 'aura-kokoro://models'
+const HF_MODEL_BASE = `https://huggingface.co/${MODEL_ID}/resolve/main/`
 const FLUSH_MIN = 35
 const FLUSH_MAX = 220
 type KokoroVoiceId = NonNullable<GenerateOptions['voice']>
@@ -40,8 +42,30 @@ type StatusCallback = (status: KokoroStatus, message?: string) => void
 type LevelCallback = (level: number) => void
 
 let modelPromise: Promise<KokoroTTS> | null = null
+let runtimeConfigured = false
+
+function configureKokoroRuntime(): void {
+  if (runtimeConfigured) return
+  runtimeConfigured = true
+
+  transformersEnv.allowLocalModels = true
+  transformersEnv.allowRemoteModels = false
+  transformersEnv.localModelPath = LOCAL_MODEL_BASE
+  transformersEnv.useBrowserCache = false
+
+  const originalFetch = window.fetch.bind(window)
+  window.fetch = (input: Parameters<typeof window.fetch>[0], init?: Parameters<typeof window.fetch>[1]): Promise<Response> => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+    if (url.startsWith(`${HF_MODEL_BASE}voices/`)) {
+      const voiceFile = url.slice(`${HF_MODEL_BASE}voices/`.length)
+      return originalFetch(`${LOCAL_MODEL_BASE}/${MODEL_ID}/voices/${voiceFile}`, init)
+    }
+    return originalFetch(input, init)
+  }
+}
 
 function loadKokoro(onStatus?: StatusCallback): Promise<KokoroTTS> {
+  configureKokoroRuntime()
   if (!modelPromise) {
     onStatus?.('loading', 'Loading Kokoro voice model...')
     modelPromise = KokoroTTS.from_pretrained(MODEL_ID, {
@@ -53,6 +77,10 @@ function loadKokoro(onStatus?: StatusCallback): Promise<KokoroTTS> {
     })
   }
   return modelPromise
+}
+
+export function warmKokoro(onStatus?: StatusCallback): Promise<void> {
+  return loadKokoro(onStatus).then(() => undefined)
 }
 
 export class SpeechQueue {
@@ -148,8 +176,8 @@ export class SpeechQueue {
         const raw = err instanceof Error ? err.message : String(err)
         const message = raw.toLowerCase().includes('failed to fetch')
           ? IS_KOREAN_EDITION
-            ? 'Kokoro 음성 모델을 다운로드할 수 없습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요.'
-            : 'Kokoro voice model could not be downloaded. Check internet access, then try again.'
+            ? '앱에 포함된 Kokoro 음성 모델을 불러올 수 없습니다. 아우라 AI를 다시 설치하거나 최신 릴리즈를 사용해 주세요.'
+            : 'Kokoro voice model could not be loaded from the bundled app files. Reinstall Aura AI or try the latest release.'
           : raw
         this.onStatus?.('error', message)
       })
