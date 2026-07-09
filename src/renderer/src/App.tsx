@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { AppSettings, Persona } from '@common/types'
+import type { AppSettings, ChatMessage, Persona, StreamEvent } from '@common/types'
 import { Sidebar } from './components/Sidebar'
 import { ChatView } from './components/ChatView'
 import { Onboarding } from './components/Onboarding'
@@ -13,7 +13,10 @@ export default function App(): React.JSX.Element {
   const [personas, setPersonas] = useState<Persona[]>([])
   const [activeId, setActiveId] = useState('')
   const [showSettings, setShowSettings] = useState(false)
-  const [showMemory, setShowMemory] = useState(false)
+  const [memoryPersona, setMemoryPersona] = useState<Persona | null | undefined>(undefined)
+  const [typingIds, setTypingIds] = useState<Set<string>>(() => new Set())
+  const [lastConversations, setLastConversations] = useState<Record<string, number>>({})
+  const [speechLevels, setSpeechLevels] = useState<Record<string, number>>({})
 
   const refreshPersonas = useCallback(() => {
     void window.aura.getPersonas().then(setPersonas)
@@ -27,6 +30,39 @@ export default function App(): React.JSX.Element {
         setActiveId(s.activePersonaId || p[0]?.id || '')
       }
     )
+  }, [])
+
+  useEffect(() => {
+    const ids = personas.map(p => p.id)
+    if (ids.length === 0) return
+    let cancelled = false
+    void Promise.all([
+      window.aura.getActiveGenerations(),
+      Promise.all(ids.map(async id => [id, latestMessageTime(await window.aura.getChat(id))] as const))
+    ]).then(([active, rows]) => {
+      if (cancelled) return
+      setTypingIds(new Set(active))
+      setLastConversations(Object.fromEntries(rows.filter(([, ts]) => ts > 0)))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [personas])
+
+  useEffect(() => {
+    const off = window.aura.onStream((ev: StreamEvent) => {
+      setLastConversations(prev => ({ ...prev, [ev.personaId]: Date.now() }))
+      if (ev.type === 'start') {
+        setTypingIds(prev => new Set(prev).add(ev.personaId))
+      } else if (ev.type === 'done' || ev.type === 'error') {
+        setTypingIds(prev => {
+          const next = new Set(prev)
+          next.delete(ev.personaId)
+          return next
+        })
+      }
+    })
+    return off
   }, [])
 
   useEffect(() => {
@@ -47,6 +83,14 @@ export default function App(): React.JSX.Element {
     },
     [settings, saveSettings]
   )
+
+  const setPersonaSpeechLevel = useCallback((personaId: string, level: number) => {
+    setSpeechLevels(prev => {
+      const current = prev[personaId] ?? 0
+      if (Math.abs(current - level) < 0.04) return prev
+      return { ...prev, [personaId]: level }
+    })
+  }, [])
 
   if (!settings) return <div className="app" />
 
@@ -86,9 +130,21 @@ export default function App(): React.JSX.Element {
         activeId={active?.id ?? ''}
         onSelect={selectPersona}
         onOpenSettings={() => setShowSettings(true)}
-        onOpenMemory={() => setShowMemory(true)}
+        onOpenMemory={() => setMemoryPersona(null)}
+        typingIds={typingIds}
+        lastConversations={lastConversations}
+        speechLevels={speechLevels}
       />
-      {active && <ChatView key={active.id} persona={active} settings={settings} />}
+      {active && (
+        <ChatView
+          key={active.id}
+          persona={active}
+          settings={settings}
+          speechLevel={speechLevels[active.id] ?? 0}
+          onSpeechLevel={setPersonaSpeechLevel}
+          onOpenPersonaMemory={() => setMemoryPersona(active)}
+        />
+      )}
       {showSettings && (
         <SettingsModal
           settings={settings}
@@ -98,7 +154,11 @@ export default function App(): React.JSX.Element {
           onPersonasChanged={refreshPersonas}
         />
       )}
-      {showMemory && <MemoryPanel onClose={() => setShowMemory(false)} />}
+      {memoryPersona !== undefined && <MemoryPanel persona={memoryPersona ?? undefined} onClose={() => setMemoryPersona(undefined)} />}
     </div>
   )
+}
+
+function latestMessageTime(messages: ChatMessage[]): number {
+  return messages.reduce((max, message) => Math.max(max, message.ts), 0)
 }

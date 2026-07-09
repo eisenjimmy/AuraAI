@@ -19,10 +19,10 @@ const api = {
     electron.ipcRenderer.on("aura:stream", listener);
     return () => electron.ipcRenderer.removeListener("aura:stream", listener);
   },
-  listMemories: () => electron.ipcRenderer.invoke("memory:list"),
-  deleteMemory: (slug) => electron.ipcRenderer.invoke("memory:delete", slug),
-  saveMemory: (note) => electron.ipcRenderer.invoke("memory:save", note),
-  openMemoryVault: () => electron.ipcRenderer.invoke("memory:openVault"),
+  listMemories: (personaId) => electron.ipcRenderer.invoke("memory:list", personaId),
+  deleteMemory: (slug, personaId) => electron.ipcRenderer.invoke("memory:delete", slug, personaId),
+  saveMemory: (note, personaId) => electron.ipcRenderer.invoke("memory:save", note, personaId),
+  openMemoryVault: (personaId) => electron.ipcRenderer.invoke("memory:openVault", personaId),
   testProvider: (config) => electron.ipcRenderer.invoke("provider:test", config),
   listLocalModels: (baseUrl) => electron.ipcRenderer.invoke("provider:localModels", baseUrl)
 };

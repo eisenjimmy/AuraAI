@@ -20,8 +20,14 @@ export const t = IS_KOREAN_EDITION
       sidebar: {
         friends: '친구들',
         memory: '기억',
+        globalMemory: '공통 기억',
         memoryTitle: '기억 보관함',
-        settings: '설정'
+        settings: '설정',
+        typing: '입력 중...',
+        justNow: '방금 전',
+        minutesAgo: (count: number) => `${count}분 전`,
+        hoursAgo: (count: number) => `${count}시간 전`,
+        daysAgo: (count: number) => `${count}일 전`
       },
       onboarding: {
         welcomeTitle: '아우라 AI에 오신 것을 환영합니다',
@@ -51,6 +57,7 @@ export const t = IS_KOREAN_EDITION
         clearTitle: '대화 지우기',
         clearButton: '대화 지우기',
         clearConfirm: (name: string) => `${name}와의 대화를 지울까요? 기억은 유지됩니다.`,
+        openPersonaMemory: (name: string) => `${name}의 기억 열기`,
         empty: '이 대화의 첫 시작입니다. 편하게 인사해보세요.',
         messagePlaceholder: (name: string) => `${name}에게 메시지`,
         removeImage: '이미지 제거',
@@ -130,10 +137,14 @@ export const t = IS_KOREAN_EDITION
       },
       memory: {
         title: '기억 보관함',
+        globalTitle: '공통 기억',
+        personaTitle: (name: string) => `${name}가 기억하고 있는 것`,
         aboutTitle: (name: string) => `${name || '사용자'}에 대해`,
         search: '기억 검색...',
         openFolder: '폴더 열기',
         hint: '모든 기억은 위키링크가 있는 마크다운 노트입니다. Obsidian에서 폴더를 열면 그래프로 볼 수 있습니다.',
+        globalHint: '모든 캐릭터가 공유하는 수동 기억입니다. 자동으로 배운 캐릭터별 기억과 분리됩니다.',
+        personaHint: (name: string) => `${name}와 나눈 대화에서 배운 기억만 표시됩니다. 다른 캐릭터에게는 공유되지 않습니다.`,
         empty: '아직 기억이 없습니다. 대화하면서 자동으로 생깁니다.',
         noMatch: '검색과 일치하는 기억이 없습니다.'
       }
@@ -157,8 +168,14 @@ export const t = IS_KOREAN_EDITION
       sidebar: {
         friends: 'Friends',
         memory: 'Memory',
+        globalMemory: 'Global memory',
         memoryTitle: 'Memory vault',
-        settings: 'Settings'
+        settings: 'Settings',
+        typing: 'Typing...',
+        justNow: 'Just now',
+        minutesAgo: (count: number) => `${count} m ago`,
+        hoursAgo: (count: number) => `${count} h ago`,
+        daysAgo: (count: number) => `${count} d ago`
       },
       onboarding: {
         welcomeTitle: 'Welcome to Aura AI',
@@ -188,6 +205,7 @@ export const t = IS_KOREAN_EDITION
         clearTitle: 'Clear conversation',
         clearButton: 'Clear chat',
         clearConfirm: (name: string) => `Clear your conversation with ${name}? Memories are kept.`,
+        openPersonaMemory: (name: string) => `Open ${name}'s memory`,
         empty: 'This is the very beginning of your conversation. Say hi!',
         messagePlaceholder: (name: string) => `Message ${name}`,
         removeImage: 'Remove image',
@@ -267,10 +285,14 @@ export const t = IS_KOREAN_EDITION
       },
       memory: {
         title: 'Memory vault',
+        globalTitle: 'Global memory',
+        personaTitle: (name: string) => `What ${name} remembers`,
         aboutTitle: (name: string) => `About ${name || 'them'}`,
         search: 'Search memories...',
         openFolder: 'Open folder',
         hint: 'Every memory is a markdown note with wikilinks — open the folder in Obsidian to see the graph.',
+        globalHint: 'Shared manual memory for all characters. Automatically learned character memories are kept separate.',
+        personaHint: (name: string) => `Only memories learned while talking with ${name} appear here. Other characters do not see them.`,
         empty: 'Nothing here yet. Memories appear automatically as you chat.',
         noMatch: 'No memories match your search.'
       }

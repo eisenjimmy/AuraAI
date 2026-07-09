@@ -290,6 +290,10 @@ function clearChat(personaId) {
 function defaultVaultPath() {
   return path.join(dataDir(), "memory-vault");
 }
+function personaVaultPath(personaId, basePath = defaultVaultPath()) {
+  const safe = sanitizeSlug(personaId) || "unknown";
+  return path.join(basePath, "characters", safe);
+}
 class MemoryVault {
   constructor(vaultPath) {
     this.vaultPath = vaultPath;
@@ -1475,7 +1479,11 @@ async function executeTool(call, ctx) {
     case "recall_memories": {
       const query = String(args.query ?? "");
       ctx.onActivity({ kind: "memory-recall", label: `Recalled memories: ${query}` });
-      const notes = await ctx.vault.recall(query, 5, ctx.provider);
+      const [personaNotes, globalNotes] = await Promise.all([
+        ctx.vault.recall(query, 5, ctx.provider),
+        ctx.globalVault ? ctx.globalVault.recall(query, 3, ctx.provider).then((notes2) => notes2.filter(isSharedMemory$1)) : Promise.resolve([])
+      ]);
+      const notes = [...personaNotes, ...globalNotes].slice(0, 6);
       return JSON.stringify({
         memories: notes.map((n) => ({ slug: n.slug, title: n.title, type: n.type, content: n.body }))
       });
@@ -1483,6 +1491,9 @@ async function executeTool(call, ctx) {
     default:
       return JSON.stringify({ error: `Unknown tool: ${call.name}` });
   }
+}
+function isSharedMemory$1(note) {
+  return !note.source || note.source === "global" || note.source === "onboarding";
 }
 async function runToolLoop(base, ctx, onText) {
   const tools = toolDefinitions(ctx.settings);
@@ -1551,8 +1562,12 @@ class ChatPipeline {
   activePersonas() {
     return [...this.active.keys()];
   }
-  vault(settings) {
+  globalVault(settings) {
     return new MemoryVault(settings.memoryVaultPath || defaultVaultPath());
+  }
+  personaVault(settings, personaId) {
+    const base = settings.memoryVaultPath || defaultVaultPath();
+    return new MemoryVault(personaVaultPath(personaId, base));
   }
   async send(personaId, text, attachments = []) {
     const settings = this.getSettings();
@@ -1582,7 +1597,8 @@ class ChatPipeline {
     this.active.set(personaId, controller);
     const signal = controller.signal;
     const provider = createProvider(settings.provider);
-    const vault = this.vault(settings);
+    const globalVault = this.globalVault(settings);
+    const personaVault = this.personaVault(settings, personaId);
     const pushActivity = (event) => {
       reply.activity.push(event);
       this.emit({ type: "activity", personaId, messageId: reply.id, event });
@@ -1590,7 +1606,11 @@ class ChatPipeline {
     try {
       let memories = [];
       if (settings.memoryEnabled) {
-        memories = await vault.recall(text, 4, provider).catch(() => []);
+        const [globalMemories, personaMemories] = await Promise.all([
+          globalVault.recall(text, 3, provider).then((notes) => notes.filter(isSharedMemory)).catch(() => []),
+          personaVault.recall(text, 4, provider).catch(() => [])
+        ]);
+        memories = [...personaMemories, ...globalMemories].slice(0, 5);
         if (memories.length > 0) {
           pushActivity({
             kind: "memory-recall",
@@ -1626,7 +1646,7 @@ class ChatPipeline {
             maxTokens: 2048,
             signal
           },
-          { settings, vault, personaId, provider, onActivity: pushActivity },
+          { settings, vault: personaVault, globalVault, personaId, provider, onActivity: pushActivity },
           onText
         );
       } else {
@@ -1644,7 +1664,7 @@ class ChatPipeline {
       updateMessage(personaId, reply);
       this.emit({ type: "done", personaId, messageId: reply.id, content: reply.content });
       if (settings.memoryEnabled && !settings.toolsMode && reply.content) {
-        void this.extractInBackground(provider, settings, vault, persona, personaId, text, reply);
+        void this.extractInBackground(provider, settings, personaVault, persona, personaId, text, reply);
       }
     } catch (err) {
       const aborted = signal.aborted;
@@ -1685,6 +1705,9 @@ class ChatPipeline {
     } catch {
     }
   }
+}
+function isSharedMemory(note) {
+  return !note.source || note.source === "global" || note.source === "onboarding";
 }
 function buildHistory(personaId, excludeMessageId, imageMessageId) {
   const all = loadChat(personaId).filter((m) => m.id !== excludeMessageId && !m.error && (m.content || m.attachments?.length));
@@ -1830,12 +1853,20 @@ function registerIpc(getWindow) {
   });
   electron.ipcMain.handle("chat:stop", (_e, personaId) => pipeline.stop(personaId));
   electron.ipcMain.handle("chat:active", () => pipeline.activePersonas());
-  const vault = () => new MemoryVault(loadSettings().memoryVaultPath || defaultVaultPath());
-  electron.ipcMain.handle("memory:list", () => vault().list());
-  electron.ipcMain.handle("memory:delete", (_e, slug) => vault().delete(slug));
-  electron.ipcMain.handle("memory:save", (_e, note) => vault().save(note));
-  electron.ipcMain.handle("memory:openVault", async () => {
-    await electron.shell.openPath(vault().path);
+  const vault = (personaId) => {
+    const base = loadSettings().memoryVaultPath || defaultVaultPath();
+    return new MemoryVault(personaId ? personaVaultPath(personaId, base) : base);
+  };
+  electron.ipcMain.handle("memory:list", (_e, personaId) => vault(personaId).list());
+  electron.ipcMain.handle("memory:delete", (_e, slug, personaId) => vault(personaId).delete(slug));
+  electron.ipcMain.handle("memory:save", (_e, note, personaId) => {
+    vault(personaId).save({
+      ...note,
+      source: note.source || (personaId ? personaId : "global")
+    });
+  });
+  electron.ipcMain.handle("memory:openVault", async (_e, personaId) => {
+    await electron.shell.openPath(vault(personaId).path);
   });
   electron.ipcMain.handle("provider:test", async (_e, config) => {
     try {

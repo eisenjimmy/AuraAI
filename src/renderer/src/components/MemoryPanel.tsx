@@ -1,23 +1,23 @@
 import { useEffect, useState } from 'react'
-import type { MemoryNote } from '@common/types'
+import type { MemoryNote, Persona } from '@common/types'
 import { CloseIcon } from './Icons'
 import { t } from '../lib/i18n'
 
 // Browser for the markdown memory vault: view, search, delete, and a
 // button that opens the folder itself (it's just Obsidian-style markdown).
 
-export function MemoryPanel({ onClose }: { onClose: () => void }): React.JSX.Element {
+export function MemoryPanel({ persona, onClose }: { persona?: Persona; onClose: () => void }): React.JSX.Element {
   const [notes, setNotes] = useState<MemoryNote[]>([])
   const [filter, setFilter] = useState('')
 
   const refresh = (): void => {
-    void window.aura.listMemories().then(setNotes)
+    void window.aura.listMemories(persona?.id).then(setNotes)
   }
 
-  useEffect(refresh, [])
+  useEffect(refresh, [persona?.id])
 
   const remove = async (slug: string): Promise<void> => {
-    await window.aura.deleteMemory(slug)
+    await window.aura.deleteMemory(slug, persona?.id)
     refresh()
   }
 
@@ -30,7 +30,7 @@ export function MemoryPanel({ onClose }: { onClose: () => void }): React.JSX.Ele
     <div className="modal-overlay" onMouseDown={e => e.target === e.currentTarget && onClose()}>
       <div className="modal">
         <div className="modal-header">
-          <h2>{t.memory.title}</h2>
+          <h2>{persona ? t.memory.personaTitle(persona.name) : t.memory.globalTitle}</h2>
           <button className="icon-btn" onClick={onClose}><CloseIcon /></button>
         </div>
         <div className="modal-body">
@@ -40,12 +40,12 @@ export function MemoryPanel({ onClose }: { onClose: () => void }): React.JSX.Ele
               value={filter}
               onChange={e => setFilter(e.target.value)}
             />
-            <button className="btn" style={{ flex: '0 0 auto' }} onClick={() => void window.aura.openMemoryVault()}>
+            <button className="btn" style={{ flex: '0 0 auto' }} onClick={() => void window.aura.openMemoryVault(persona?.id)}>
               {t.memory.openFolder}
             </button>
           </div>
           <p className="hint" style={{ fontSize: 12.5, color: 'var(--text-faint)', marginBottom: 12 }}>
-            {t.memory.hint}
+            {persona ? t.memory.personaHint(persona.name) : t.memory.globalHint}
           </p>
           {visible.length === 0 && (
             <p style={{ color: 'var(--text-muted)', fontSize: 14 }}>

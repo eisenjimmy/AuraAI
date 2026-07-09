@@ -9,18 +9,21 @@ import { t } from '../lib/i18n'
 interface ChatViewProps {
   persona: Persona
   settings: AppSettings
+  speechLevel: number
+  onSpeechLevel: (personaId: string, level: number) => void
+  onOpenPersonaMemory: () => void
 }
 
 const GROUP_WINDOW_MS = 7 * 60 * 1000
 
-export function ChatView({ persona, settings }: ChatViewProps): React.JSX.Element {
+export function ChatView({ persona, settings, speechLevel, onSpeechLevel, onOpenPersonaMemory }: ChatViewProps): React.JSX.Element {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [busy, setBusy] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const speechRef = useRef<SpeechQueue | null>(null)
   const stickToBottom = useRef(true)
 
-  if (!speechRef.current) speechRef.current = new SpeechQueue()
+  if (!speechRef.current) speechRef.current = new SpeechQueue(undefined, level => onSpeechLevel(persona.id, level))
   speechRef.current.setVoice(persona.voice)
 
   // Load history on mount (the component remounts per persona via key).
@@ -43,8 +46,9 @@ export function ChatView({ persona, settings }: ChatViewProps): React.JSX.Elemen
     return () => {
       cancelled = true
       speechRef.current?.stop()
+      onSpeechLevel(persona.id, 0)
     }
-  }, [persona.id])
+  }, [onSpeechLevel, persona.id])
 
   // Turning voice off silences anything already queued.
   useEffect(() => {
@@ -108,7 +112,9 @@ export function ChatView({ persona, settings }: ChatViewProps): React.JSX.Elemen
   return (
     <div className="chat">
       <div className="chat-header">
-        <Avatar persona={persona} size={28} />
+        <button className="avatar-button" onClick={onOpenPersonaMemory} title={t.chat.openPersonaMemory(persona.name)}>
+          <Avatar persona={persona} size={28} activityLevel={speechLevel} />
+        </button>
         <div>
           <div className="title">{persona.name}</div>
           <div className="subtitle">{persona.tagline}</div>
@@ -127,7 +133,7 @@ export function ChatView({ persona, settings }: ChatViewProps): React.JSX.Elemen
       {messages.length === 0 ? (
         <div className="empty-chat">
           <div className="big-avatar">
-            <Avatar persona={persona} size={80} />
+            <Avatar persona={persona} size={80} activityLevel={speechLevel} />
           </div>
           <h2>{persona.name}</h2>
           <p>{persona.tagline}</p>
@@ -194,6 +200,7 @@ function MessageRow({ message, prev, persona, userName }: MessageRowProps): Reac
 
   const author = message.role === 'user' ? userName || t.common.you : persona.name
   const time = new Date(message.ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  const visibleActivity = (message.activity ?? []).filter(a => a.kind !== 'memory-recall')
 
   return (
     <div className={`msg-group ${compact ? 'compact' : ''}`}>
@@ -214,9 +221,9 @@ function MessageRow({ message, prev, persona, userName }: MessageRowProps): Reac
             <span className="msg-time">{time}</span>
           </div>
         )}
-        {message.activity && message.activity.length > 0 && (
+        {visibleActivity.length > 0 && (
           <div className="activity-row">
-            {message.activity.map((a, i) => (
+            {visibleActivity.map((a, i) => (
               <span key={i} className="activity-chip" title={a.detail}>
                 {activityIcon(a.kind)} {a.label}
               </span>

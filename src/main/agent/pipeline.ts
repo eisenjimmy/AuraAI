@@ -3,7 +3,7 @@ import { readFileSync } from 'fs'
 import type { AppSettings, ChatMessage, Persona, StreamEvent, ActivityEvent, MemoryNote } from '@common/types'
 import type { ChatProvider, ProviderContentPart, ProviderMessage } from '../providers/types'
 import { createProvider } from '../providers'
-import { MemoryVault, defaultVaultPath } from '../memory/vault'
+import { MemoryVault, defaultVaultPath, personaVaultPath } from '../memory/vault'
 import { extractMemory } from '../memory/extractor'
 import { webSearch, shouldSearch } from '../search/webSearch'
 import { buildSystemPrompt } from './prompt'
@@ -43,8 +43,13 @@ export class ChatPipeline {
     return [...this.active.keys()]
   }
 
-  private vault(settings: AppSettings): MemoryVault {
+  private globalVault(settings: AppSettings): MemoryVault {
     return new MemoryVault(settings.memoryVaultPath || defaultVaultPath())
+  }
+
+  private personaVault(settings: AppSettings, personaId: string): MemoryVault {
+    const base = settings.memoryVaultPath || defaultVaultPath()
+    return new MemoryVault(personaVaultPath(personaId, base))
   }
 
   async send(personaId: string, text: string, attachments = [] as ChatMessage['attachments']): Promise<void> {
@@ -80,7 +85,8 @@ export class ChatPipeline {
     this.active.set(personaId, controller)
     const signal = controller.signal
     const provider = createProvider(settings.provider)
-    const vault = this.vault(settings)
+    const globalVault = this.globalVault(settings)
+    const personaVault = this.personaVault(settings, personaId)
 
     const pushActivity = (event: ActivityEvent): void => {
       reply.activity!.push(event)
@@ -91,7 +97,11 @@ export class ChatPipeline {
       // 1. Memory recall (deterministic, always on when enabled).
       let memories: MemoryNote[] = []
       if (settings.memoryEnabled) {
-        memories = await vault.recall(text, 4, provider).catch(() => [])
+        const [globalMemories, personaMemories] = await Promise.all([
+          globalVault.recall(text, 3, provider).then(notes => notes.filter(isSharedMemory)).catch(() => []),
+          personaVault.recall(text, 4, provider).catch(() => [])
+        ])
+        memories = [...personaMemories, ...globalMemories].slice(0, 5)
         if (memories.length > 0) {
           pushActivity({
             kind: 'memory-recall',
@@ -137,7 +147,7 @@ export class ChatPipeline {
             maxTokens: 2048,
             signal
           },
-          { settings, vault, personaId, provider, onActivity: pushActivity },
+          { settings, vault: personaVault, globalVault, personaId, provider, onActivity: pushActivity },
           onText
         )
       } else {
@@ -158,7 +168,7 @@ export class ChatPipeline {
 
       // 5. Background memory extraction (fire and forget, never blocks chat).
       if (settings.memoryEnabled && !settings.toolsMode && reply.content) {
-        void this.extractInBackground(provider, settings, vault, persona, personaId, text, reply)
+        void this.extractInBackground(provider, settings, personaVault, persona, personaId, text, reply)
       }
     } catch (err) {
       const aborted = signal.aborted
@@ -207,6 +217,10 @@ export class ChatPipeline {
       }
     } catch { /* extraction must never break chat */ }
   }
+}
+
+function isSharedMemory(note: MemoryNote): boolean {
+  return !note.source || note.source === 'global' || note.source === 'onboarding'
 }
 
 function buildHistory(personaId: string, excludeMessageId: string, imageMessageId: string): ProviderMessage[] {

@@ -22,10 +22,10 @@ const api: AuraApi = {
     return () => ipcRenderer.removeListener('aura:stream', listener)
   },
 
-  listMemories: () => ipcRenderer.invoke('memory:list'),
-  deleteMemory: slug => ipcRenderer.invoke('memory:delete', slug),
-  saveMemory: note => ipcRenderer.invoke('memory:save', note),
-  openMemoryVault: () => ipcRenderer.invoke('memory:openVault'),
+  listMemories: personaId => ipcRenderer.invoke('memory:list', personaId),
+  deleteMemory: (slug, personaId) => ipcRenderer.invoke('memory:delete', slug, personaId),
+  saveMemory: (note, personaId) => ipcRenderer.invoke('memory:save', note, personaId),
+  openMemoryVault: personaId => ipcRenderer.invoke('memory:openVault', personaId),
 
   testProvider: config => ipcRenderer.invoke('provider:test', config),
   listLocalModels: baseUrl => ipcRenderer.invoke('provider:localModels', baseUrl)

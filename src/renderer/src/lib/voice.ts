@@ -36,6 +36,7 @@ export const KOKORO_VOICES: KokoroVoiceOption[] = [
 
 type KokoroStatus = 'idle' | 'loading' | 'speaking' | 'error'
 type StatusCallback = (status: KokoroStatus, message?: string) => void
+type LevelCallback = (level: number) => void
 
 let modelPromise: Promise<KokoroTTS> | null = null
 
@@ -59,13 +60,21 @@ export class SpeechQueue {
   private chain: Promise<void> = Promise.resolve()
   private generation = 0
   private onStatus?: StatusCallback
+  private onLevel?: LevelCallback
+  private stopLevelMeter?: () => void
+  private finishCurrentPlayback?: () => void
 
-  constructor(onStatus?: StatusCallback) {
+  constructor(onStatus?: StatusCallback, onLevel?: LevelCallback) {
     this.onStatus = onStatus
+    this.onLevel = onLevel
   }
 
   setStatusCallback(onStatus?: StatusCallback): void {
     this.onStatus = onStatus
+  }
+
+  setLevelCallback(onLevel?: LevelCallback): void {
+    this.onLevel = onLevel
   }
 
   setVoice(voice: VoiceSettings): void {
@@ -94,12 +103,17 @@ export class SpeechQueue {
     this.generation += 1
     this.buffer = ''
     this.active = false
+    this.stopLevelMeter?.()
+    this.stopLevelMeter = undefined
+    this.finishCurrentPlayback?.()
+    this.finishCurrentPlayback = undefined
     if (this.currentAudio) {
       this.currentAudio.pause()
       this.currentAudio.src = ''
       this.currentAudio = null
     }
     this.revokeCurrentUrl()
+    this.onLevel?.(0)
     this.onStatus?.('idle')
   }
 
@@ -137,16 +151,57 @@ export class SpeechQueue {
     this.currentUrl = url
     const player = new Audio(url)
     this.currentAudio = player
+    const stopMeter = this.monitorPlaybackLevel(player)
+    this.stopLevelMeter = stopMeter
 
     await new Promise<void>((resolve, reject) => {
+      this.finishCurrentPlayback = resolve
       player.onended = () => resolve()
       player.onerror = () => reject(new Error('Audio playback failed.'))
       void player.play().catch(reject)
     }).finally(() => {
+      stopMeter()
+      if (this.stopLevelMeter === stopMeter) this.stopLevelMeter = undefined
+      this.finishCurrentPlayback = undefined
       if (this.currentAudio === player) this.currentAudio = null
       if (token === this.generation) this.onStatus?.('idle')
+      this.onLevel?.(0)
       this.revokeCurrentUrl()
     })
+  }
+
+  private monitorPlaybackLevel(player: HTMLAudioElement): () => void {
+    const AudioContextCtor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!AudioContextCtor || !this.onLevel) return () => undefined
+
+    const ctx = new AudioContextCtor()
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 256
+    analyser.smoothingTimeConstant = 0.72
+    const source = ctx.createMediaElementSource(player)
+    source.connect(analyser)
+    analyser.connect(ctx.destination)
+
+    const data = new Uint8Array(analyser.frequencyBinCount)
+    let frame = 0
+    const tick = (): void => {
+      analyser.getByteTimeDomainData(data)
+      let sum = 0
+      for (const value of data) {
+        const centered = (value - 128) / 128
+        sum += centered * centered
+      }
+      const rms = Math.sqrt(sum / data.length)
+      this.onLevel?.(clamp(rms * 3.2, 0, 1))
+      frame = window.requestAnimationFrame(tick)
+    }
+    tick()
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame)
+      this.onLevel?.(0)
+      void ctx.close().catch(() => undefined)
+    }
   }
 
   private revokeCurrentUrl(): void {

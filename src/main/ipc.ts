@@ -5,7 +5,7 @@ import { basename, join, extname } from 'path'
 import type { AppSettings, Persona, ProviderConfig, SendMessageRequest, MemoryNote, ChatAttachment } from '@common/types'
 import { loadSettings, saveSettings, loadPersonas, savePersona, resetPersona, dataDir, defaultImageStoragePath } from './store'
 import { loadChat, clearChat } from './chats'
-import { MemoryVault, defaultVaultPath } from './memory/vault'
+import { MemoryVault, defaultVaultPath, personaVaultPath } from './memory/vault'
 import { createProvider, PROVIDER_PRESETS } from './providers'
 import { OpenAICompatProvider } from './providers/openaiCompat'
 import { ChatPipeline } from './agent/pipeline'
@@ -115,12 +115,20 @@ export function registerIpc(getWindow: () => BrowserWindow | null): void {
   ipcMain.handle('chat:active', () => pipeline.activePersonas())
 
   // ---------- memory ----------
-  const vault = (): MemoryVault => new MemoryVault(loadSettings().memoryVaultPath || defaultVaultPath())
-  ipcMain.handle('memory:list', (): MemoryNote[] => vault().list())
-  ipcMain.handle('memory:delete', (_e, slug: string) => vault().delete(slug))
-  ipcMain.handle('memory:save', (_e, note: MemoryNote) => vault().save(note))
-  ipcMain.handle('memory:openVault', async () => {
-    await shell.openPath(vault().path)
+  const vault = (personaId?: string): MemoryVault => {
+    const base = loadSettings().memoryVaultPath || defaultVaultPath()
+    return new MemoryVault(personaId ? personaVaultPath(personaId, base) : base)
+  }
+  ipcMain.handle('memory:list', (_e, personaId?: string): MemoryNote[] => vault(personaId).list())
+  ipcMain.handle('memory:delete', (_e, slug: string, personaId?: string) => vault(personaId).delete(slug))
+  ipcMain.handle('memory:save', (_e, note: MemoryNote, personaId?: string) => {
+    vault(personaId).save({
+      ...note,
+      source: note.source || (personaId ? personaId : 'global')
+    })
+  })
+  ipcMain.handle('memory:openVault', async (_e, personaId?: string) => {
+    await shell.openPath(vault(personaId).path)
   })
 
   // ---------- providers ----------

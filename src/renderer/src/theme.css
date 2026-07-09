@@ -205,6 +205,10 @@ select:focus {
   text-overflow: ellipsis;
 }
 
+.persona-item.active .tagline {
+  color: var(--text-muted);
+}
+
 .sidebar-footer {
   padding: 8px;
   border-top: 1px solid var(--border);
@@ -231,6 +235,9 @@ select:focus {
 /* ---------- avatars ---------- */
 
 .avatar {
+  --avatar-level: 0;
+  --avatar-glow: 5px;
+  --avatar-rise: 0px;
   border-radius: 50%;
   flex-shrink: 0;
   display: grid;
@@ -239,11 +246,19 @@ select:focus {
   user-select: none;
   overflow: hidden;
   background: var(--bg-input);
-  border: 1px solid currentColor;
+  border: none;
+  box-shadow:
+    0 2px 7px rgba(0, 0, 0, 0.28),
+    0 0 var(--avatar-glow) color-mix(in srgb, currentColor 24%, transparent);
+  transition: box-shadow 0.08s linear, transform 0.08s linear;
 }
 
 .icon-avatar {
   background: color-mix(in srgb, currentColor 11%, var(--bg-input));
+}
+
+.avatar.speaking {
+  transform: translateY(var(--avatar-rise));
 }
 
 .icon-avatar svg {
@@ -255,6 +270,18 @@ select:focus {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.avatar-button {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  padding: 0;
+}
+
+.avatar-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 /* ---------- chat ---------- */

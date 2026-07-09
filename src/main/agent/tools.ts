@@ -75,6 +75,7 @@ const MEMORY_TOOLS: ToolDefinition[] = [
 export interface ToolContext {
   settings: AppSettings
   vault: MemoryVault
+  globalVault?: MemoryVault
   personaId: string
   provider: ChatProvider
   onActivity: (event: ActivityEvent) => void
@@ -124,7 +125,13 @@ async function executeTool(call: ToolCall, ctx: ToolContext): Promise<string> {
     case 'recall_memories': {
       const query = String(args.query ?? '')
       ctx.onActivity({ kind: 'memory-recall', label: IS_KOREAN_EDITION ? `기억 검색: ${query}` : `Recalled memories: ${query}` })
-      const notes = await ctx.vault.recall(query, 5, ctx.provider)
+      const [personaNotes, globalNotes] = await Promise.all([
+        ctx.vault.recall(query, 5, ctx.provider),
+        ctx.globalVault
+          ? ctx.globalVault.recall(query, 3, ctx.provider).then(notes => notes.filter(isSharedMemory))
+          : Promise.resolve([])
+      ])
+      const notes = [...personaNotes, ...globalNotes].slice(0, 6)
       return JSON.stringify({
         memories: notes.map(n => ({ slug: n.slug, title: n.title, type: n.type, content: n.body }))
       })
@@ -132,6 +139,10 @@ async function executeTool(call: ToolCall, ctx: ToolContext): Promise<string> {
     default:
       return JSON.stringify({ error: IS_KOREAN_EDITION ? `알 수 없는 도구: ${call.name}` : `Unknown tool: ${call.name}` })
   }
+}
+
+function isSharedMemory(note: { source?: string }): boolean {
+  return !note.source || note.source === 'global' || note.source === 'onboarding'
 }
 
 /**

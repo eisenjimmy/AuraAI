@@ -173,10 +173,10 @@ export interface AuraApi {
   getActiveGenerations(): Promise<string[]>
   onStream(cb: (ev: StreamEvent) => void): () => void
 
-  listMemories(): Promise<MemoryNote[]>
-  deleteMemory(slug: string): Promise<void>
-  saveMemory(note: MemoryNote): Promise<void>
-  openMemoryVault(): Promise<void>
+  listMemories(personaId?: string): Promise<MemoryNote[]>
+  deleteMemory(slug: string, personaId?: string): Promise<void>
+  saveMemory(note: MemoryNote, personaId?: string): Promise<void>
+  openMemoryVault(personaId?: string): Promise<void>
 
   testProvider(config: ProviderConfig): Promise<TestProviderResult>
   listLocalModels(baseUrl: string): Promise<string[]>

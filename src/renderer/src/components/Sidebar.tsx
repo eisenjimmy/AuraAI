@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { Persona } from '@common/types'
 import { Avatar } from './Avatar'
 import { GearIcon, VaultIcon } from './Icons'
@@ -9,9 +10,28 @@ interface SidebarProps {
   onSelect: (id: string) => void
   onOpenSettings: () => void
   onOpenMemory: () => void
+  typingIds: Set<string>
+  lastConversations: Record<string, number>
+  speechLevels: Record<string, number>
 }
 
-export function Sidebar({ personas, activeId, onSelect, onOpenSettings, onOpenMemory }: SidebarProps): React.JSX.Element {
+export function Sidebar({
+  personas,
+  activeId,
+  onSelect,
+  onOpenSettings,
+  onOpenMemory,
+  typingIds,
+  lastConversations,
+  speechLevels
+}: SidebarProps): React.JSX.Element {
+  const [, setClock] = useState(0)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+
   return (
     <div className="sidebar">
       <div className="sidebar-header">
@@ -26,17 +46,17 @@ export function Sidebar({ personas, activeId, onSelect, onOpenSettings, onOpenMe
             className={`persona-item ${p.id === activeId ? 'active' : ''}`}
             onClick={() => onSelect(p.id)}
           >
-            <Avatar persona={p} size={34} />
+            <Avatar persona={p} size={34} activityLevel={speechLevels[p.id] ?? 0} />
             <div className="meta">
               <div className="name">{p.name}</div>
-              <div className="tagline">{p.tagline}</div>
+              <div className="tagline">{typingIds.has(p.id) ? t.sidebar.typing : relativeTime(lastConversations[p.id]) || p.tagline}</div>
             </div>
           </button>
         ))}
       </div>
       <div className="sidebar-footer">
         <button onClick={onOpenMemory} title={t.sidebar.memoryTitle}>
-          <VaultIcon /> {t.sidebar.memory}
+          <VaultIcon /> {t.sidebar.globalMemory}
         </button>
         <button onClick={onOpenSettings} title={t.sidebar.settings}>
           <GearIcon /> {t.sidebar.settings}
@@ -44,4 +64,17 @@ export function Sidebar({ personas, activeId, onSelect, onOpenSettings, onOpenMe
       </div>
     </div>
   )
+}
+
+function relativeTime(ts?: number): string {
+  if (!ts) return ''
+  const diff = Math.max(0, Date.now() - ts)
+  const min = Math.floor(diff / 60_000)
+  if (min < 1) return t.sidebar.justNow
+  if (min < 60) return t.sidebar.minutesAgo(min)
+  const hours = Math.floor(min / 60)
+  if (hours < 24) return t.sidebar.hoursAgo(hours)
+  const days = Math.floor(hours / 24)
+  if (days < 7) return t.sidebar.daysAgo(days)
+  return new Date(ts).toLocaleDateString()
 }

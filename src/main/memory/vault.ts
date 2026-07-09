@@ -19,6 +19,11 @@ export function defaultVaultPath(): string {
   return join(dataDir(), 'memory-vault')
 }
 
+export function personaVaultPath(personaId: string, basePath = defaultVaultPath()): string {
+  const safe = sanitizeSlug(personaId) || 'unknown'
+  return join(basePath, 'characters', safe)
+}
+
 export class MemoryVault {
   constructor(private vaultPath: string) {
     if (!existsSync(this.vaultPath)) mkdirSync(this.vaultPath, { recursive: true })
