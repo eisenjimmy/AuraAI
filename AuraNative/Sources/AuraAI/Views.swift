@@ -470,6 +470,23 @@ private struct AttachmentChip: View {
     var remove: (() -> Void)?
 
     var body: some View {
+        Group {
+            if remove == nil, let url = existingFileURL {
+                Button { NSWorkspace.shared.open(url) } label: { chipContent }
+                    .buttonStyle(.plain)
+                    .help(auraText("Open file", "파일 열기"))
+            } else {
+                chipContent
+            }
+        }
+    }
+
+    private var existingFileURL: URL? {
+        let url = URL(fileURLWithPath: attachment.storedPath)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    private var chipContent: some View {
         HStack(spacing: 6) {
             Image(systemName: attachment.kind.contains("Image") ? "photo" : "doc")
             VStack(alignment: .leading, spacing: 0) {

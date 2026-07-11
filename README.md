@@ -253,12 +253,15 @@ Network traffic goes only to:
 - A single chat composer accepts text and multiple attachments together. Aura accepts files up to **20 MB each**, copies selected files into its private app data, extracts Word (`.docx`), Excel (`.xlsx`), PDF, image, Markdown, HTML, CSV, and text content, and keeps that context with the conversation. Extracted text is budgeted to fit small local-model context windows instead of sending an unbounded prompt.
 - Offline OCR uses Apple's Vision framework for images and scanned PDF pages. It requires no model download, Python service, or cloud request. The experimental `baidu/Unlimited-OCR` model is not embedded because its official distribution requires custom Python/CUDA inference and multi-gigabyte weights; it remains a possible optional external endpoint.
 - Friends with tools enabled can create real styled `.xlsx` workbooks, self-contained HTML reports, and Markdown documents inside the selected workspace. Every artifact write is previewed for approval.
+- Generated documents appear as clickable file attachments on the friend’s reply. Aura accepts both the documented tool-call JSON envelope and the flat JSON form produced by some local models.
 
 The agent harness switch lives only in **Settings > Tools**. Chat stays focused on the friend and the work; tool permissions are configured once rather than repeated in every conversation.
 
 Settings uses a stable 720 x 600 layout so switching tabs does not resize or recenter the modal. Settings and Add Friend both include explicit close buttons.
 
 Right-click any friend in the sidebar and choose **Edit friend** to open the native Friend Editor. It can restore any bundled template portrait, import a custom photo, and configure the friend's name, specialty, tagline, and personality instructions. **Open memory** remains available from the same context menu.
+
+The Korean edition reuses the established Korean personality prompts from the Electron app, and enforces Korean replies for normal chat and tool-assisted work unless a user explicitly requests another language.
 
 The first native privacy layer is intentionally conservative. It does not claim to classify names or street addresses until Aura ships a separately verified on-device classifier.
 

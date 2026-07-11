@@ -20,7 +20,8 @@ struct AgentHarness {
         authorizedFolders: [URL],
         requestFolder: @escaping @MainActor (String) async -> URL?,
         approval: @escaping @MainActor (AgentApproval) async -> Bool
-    ) async throws -> String {
+    ) async throws -> AgentRunResult {
+        var generatedAttachments: [ChatAttachment] = []
         var readableFolders = authorizedFolders.map(\.standardizedFileURL)
         let requestedFolder = AgentFolderIntent.explicitFolder(in: userPrompt)
         var initialFolderResult: String?
@@ -31,7 +32,7 @@ struct AgentHarness {
         if let requestedFolder,
            !readableFolders.contains(where: { $0.lastPathComponent.caseInsensitiveCompare(requestedFolder) == .orderedSame }) {
             guard let grantedFolder = await requestFolder(requestedFolder) else {
-                return "I couldn't inspect \(requestedFolder) because folder access was not granted."
+                return AgentRunResult(response: "I couldn't inspect \(requestedFolder) because folder access was not granted.", attachments: [])
             }
             readableFolders.append(grantedFolder.standardizedFileURL)
         }
@@ -57,7 +58,9 @@ struct AgentHarness {
 
         for _ in 0..<maximumSteps {
             let reply = try await client.complete(messages: transcript, configuration: configuration)
-            guard let call = ToolCall.parse(reply) else { return reply }
+            guard let call = ToolCall.parse(reply) else {
+                return AgentRunResult(response: reply, attachments: generatedAttachments)
+            }
             let execution = try await AgentToolExecutor.execute(
                 call,
                 workspace: workspace,
@@ -68,10 +71,14 @@ struct AgentHarness {
             if let grantedFolder = execution.grantedFolder, !readableFolders.contains(grantedFolder) {
                 readableFolders.append(grantedFolder)
             }
+            generatedAttachments += execution.attachments
             transcript.append(ModelMessage(role: "assistant", content: reply))
             transcript.append(internalToolResult(execution.output))
         }
-        return "I stopped after \(maximumSteps) tool steps. The work may be incomplete; review the activity and continue with a more specific instruction."
+        return AgentRunResult(
+            response: "I stopped after \(maximumSteps) tool steps. The work may be incomplete; review the activity and continue with a more specific instruction.",
+            attachments: generatedAttachments
+        )
     }
 
     private func baseMessages(
@@ -92,6 +99,8 @@ struct AgentHarness {
             "The current request explicitly targets the approved \($0) folder. Report only what the internal folder result confirms."
         } ?? ""
         let instructions = """
+        \(AuraEdition.current.responseLanguageInstruction)
+
         \(member.systemPrompt)
 
         You are operating inside Aura's permissioned agent harness. Selected workspace: \(workspaceDescription)
@@ -109,7 +118,7 @@ struct AgentHarness {
         create_spreadsheet {"path":"report.xlsx","sheet":"Summary","title":"Report","headers":["Item","Amount"],"rows":[["Example",1250],["Active",true]]}.
         run_shell {"command":"git status --short"}; computer {"action":"open_app|open_url|click|type|key","value":"...","x":0,"y":0}.
         Use the dedicated document tools when the user asks for Markdown, HTML, or Excel. Excel output must be a real .xlsx workbook, never CSV renamed to .xlsx.
-        Tool results are internal. Never show <tool_result>, tool JSON, or raw arrays to the user. Once work is complete, give a concise factual answer that names the exact folder inspected. Do not use fake excitement or claim success when access was declined.
+        Tool results are internal. Never show <tool_result>, tool JSON, or raw arrays to the user. Once work is complete, give a concise factual answer that names the exact folder inspected. Do not use fake excitement or claim success when access was declined. Follow the response-language instruction even if tool output is in another language.
         """
         var messages = [ModelMessage(role: "system", content: instructions)]
         if !globalMemory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -131,6 +140,11 @@ struct AgentHarness {
     }
 }
 
+struct AgentRunResult {
+    var response: String
+    var attachments: [ChatAttachment]
+}
+
 enum AgentFolderIntent {
     static func explicitFolder(in text: String) -> String? {
         let lowercased = text.lowercased()
@@ -141,14 +155,25 @@ enum AgentFolderIntent {
     }
 }
 
-private struct ToolCall: Decodable {
+struct ToolCall: Decodable {
     var name: String
     var arguments: [String: JSONValue]
 
     static func parse(_ text: String) -> ToolCall? {
         guard let start = text.range(of: "<tool_call>"), let end = text.range(of: "</tool_call>") else { return nil }
         let json = String(text[start.upperBound..<end.lowerBound])
-        return try? JSONDecoder().decode(ToolCall.self, from: Data(json.utf8))
+        let data = Data(json.utf8)
+        if let call = try? JSONDecoder().decode(ToolCall.self, from: data) { return call }
+
+        // Smaller local models sometimes omit the documented `arguments`
+        // envelope. Accept that flat form while preserving the same executor.
+        guard var object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let name = object.removeValue(forKey: "name") as? String,
+              let argumentsData = try? JSONSerialization.data(withJSONObject: object),
+              let arguments = try? JSONDecoder().decode([String: JSONValue].self, from: argumentsData) else {
+            return nil
+        }
+        return ToolCall(name: name, arguments: arguments)
     }
 }
 
@@ -178,6 +203,7 @@ enum JSONValue: Decodable {
 private struct ToolExecution {
     var output: String
     var grantedFolder: URL?
+    var attachments: [ChatAttachment] = []
 }
 
 private enum AgentToolExecutor {
@@ -235,7 +261,7 @@ private enum AgentToolExecutor {
             ))
             guard allowed else { return ToolExecution(output: "User declined the Markdown document write.", grantedFolder: nil) }
             try ArtifactWriter.markdown(content: content, to: file)
-            return ToolExecution(output: "Created Markdown document at \(path).", grantedFolder: nil)
+            return ToolExecution(output: "Created Markdown document at \(path).", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "Markdown document")])
         case "create_html_document":
             let path = try required("path", call.arguments)
             let title = try required("title", call.arguments)
@@ -249,7 +275,7 @@ private enum AgentToolExecutor {
             ))
             guard allowed else { return ToolExecution(output: "User declined the HTML document write.", grantedFolder: nil) }
             try ArtifactWriter.html(title: title, summary: summary, bodyHTML: body, to: file)
-            return ToolExecution(output: "Created self-contained HTML document at \(path).", grantedFolder: nil)
+            return ToolExecution(output: "Created self-contained HTML document at \(path).", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "HTML document")])
         case "create_spreadsheet":
             let path = try required("path", call.arguments)
             let title = try required("title", call.arguments)
@@ -264,7 +290,7 @@ private enum AgentToolExecutor {
             ))
             guard allowed else { return ToolExecution(output: "User declined the Excel workbook write.", grantedFolder: nil) }
             try ArtifactWriter.spreadsheet(title: title, sheetName: sheet, headers: headers, rows: rows, to: file)
-            return ToolExecution(output: "Created Excel workbook at \(path) with \(rows.count) data rows.", grantedFolder: nil)
+            return ToolExecution(output: "Created Excel workbook at \(path) with \(rows.count) data rows.", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "Excel workbook")])
         case "run_shell":
             let command = try required("command", call.arguments)
             let root = try AgentPathResolver.workspaceRoot(workspace)
@@ -290,6 +316,15 @@ private enum AgentToolExecutor {
             throw LLMClientError.badResponse("Tool requires a non-empty \(key).")
         }
         return value
+    }
+
+    private static func generatedAttachment(_ file: URL, kind: String) -> ChatAttachment {
+        ChatAttachment(
+            fileName: file.lastPathComponent,
+            storedPath: file.path,
+            kind: kind,
+            extractedText: ""
+        )
     }
 
     private static func requiredArray(_ key: String, _ values: [String: JSONValue]) throws -> [JSONValue] {

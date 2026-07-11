@@ -41,7 +41,9 @@ final class AuraPersistence {
         if !members.isEmpty, members.allSatisfy({ TeamMember.legacyNativeNames.contains($0.name) }) {
             return TeamMember.defaults
         }
-        return members
+        let migrated = TeamMember.migratingKoreanLegacyPrompts(members)
+        if migrated != members { saveMembers(migrated) }
+        return migrated
     }
     func saveMembers(_ members: [TeamMember]) { save(members, to: "team.json") }
 

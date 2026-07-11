@@ -16,6 +16,9 @@ a permissioned agent harness for practical document work.
   Markdown documents inside the selected workspace.
 - Right-clicking a friend opens memory or a Friend Editor for bundled template
   portraits, custom photo upload, specialty, tagline, and personality.
+- The Korean edition reuses its full Korean persona prompts from the Electron
+  source and requires Korean responses unless the user requests another
+  language. Document tools attach their output to the final assistant reply.
 
 `baidu/Unlimited-OCR` is not embedded in the app. Its official runtime uses a
 large custom Python/CUDA model, which is not compatible with Aura's signed,

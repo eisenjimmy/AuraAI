@@ -252,8 +252,9 @@ final class AuraStore: ObservableObject {
         Task {
             do {
                 let response: String
+                let responseAttachments: [ChatAttachment]
                 if agentMode {
-                    response = try await AgentHarness().run(
+                    let result = try await AgentHarness().run(
                         userPrompt: text,
                         member: member,
                         history: Array(history),
@@ -265,17 +266,20 @@ final class AuraStore: ObservableObject {
                         requestFolder: { name in await self.requestFolderAccess(named: name) },
                         approval: { approval in await self.requestApproval(approval) }
                     )
+                    response = result.response
+                    responseAttachments = result.attachments
                 } else {
-                    let system = [member.systemPrompt, globalMemory.isEmpty ? nil : "Shared user memory:\n\(globalMemory)", privateMemory.isEmpty ? nil : "Your private memory:\n\(privateMemory)"]
+                    let system = [AuraEdition.current.responseLanguageInstruction, member.systemPrompt, globalMemory.isEmpty ? nil : "Shared user memory:\n\(globalMemory)", privateMemory.isEmpty ? nil : "Your private memory:\n\(privateMemory)"]
                         .compactMap { $0 }
                         .joined(separator: "\n\n")
                     let modelMessages = [ModelMessage(role: "system", content: system)]
                         + history.suffix(16).map { ModelMessage(role: $0.role.rawValue, content: $0.modelContent) }
                         + [ModelMessage(role: "user", content: text)]
                     response = try await OpenAICompatibleClient().complete(messages: modelMessages, configuration: config)
+                    responseAttachments = []
                 }
                 let restored = privacyReview.map { privacyFilter.restore(response, review: $0) } ?? response
-                messages.append(ConversationMessage(role: .assistant, content: restored))
+                messages.append(ConversationMessage(role: .assistant, content: restored, attachments: responseAttachments))
                 persistence.saveConversation(messages, memberID: member.id)
             } catch {
                 errorMessage = error.localizedDescription
