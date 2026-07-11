@@ -246,7 +246,7 @@ Network traffic goes only to:
 
 `AuraNative/` is a SwiftUI macOS app for people who want Aura to feel like a small, bounded AI team rather than a browser wrapper. Its onboarding selects a model connection, configures cloud privacy review, and chooses the first team roles.
 
-- The familiar Aura friends stay at the center: **Nova** (Chief of Staff), **Sage** (People and HR), **Rio** (Developer), **Luna** (Research), **Max** (IT), **Gilleon** (Product Strategy), and **Neir** (Design and Vision). **Avery** adds a dedicated legal-and-risk perspective. Each keeps an isolated conversation, portrait, and character memory.
+- The familiar Aura friends stay at the center: **Nova** (Chief of Staff), **Sage** (People and HR), **Rio** (Developer), **Luna** (Research), **Max** (IT), **Gilleon** (Product Strategy), and **Neir** (Design and Vision). **Avery** adds legal-and-risk perspective, while **Dr. Maya** provides careful Family Medicine guidance. Each keeps an isolated conversation, portrait, and character memory.
 - Editable global memory shared by the team.
 - Native cloud privacy review: high-confidence emails, phone numbers, payment-card numbers, and likely API secrets are replaced locally with placeholders, reviewed before send, then restored only in Aura's displayed response.
 - A bounded agent harness for workspace and desktop work. Reads inside the selected workspace are automatic; personal folders such as Downloads require an explicit Finder grant. File writes, shell commands, and macOS control require a one-time approval. Clicking and typing also require macOS Accessibility permission.
@@ -262,6 +262,8 @@ Aura creates `Documents/AuraAi` as the default document-write folder on first la
 Settings uses a stable 720 x 600 layout so switching tabs does not resize or recenter the modal. Settings and Add Friend both include explicit close buttons.
 
 Right-click any friend in the sidebar and choose **Edit friend** to open the native Friend Editor. It can restore any bundled template portrait, import a custom photo, and configure the friend's name, specialty, tagline, personality instructions, and allowed skills. **Open memory** remains available from the same context menu. Editing or opening memory from **Settings > Friends** opens immediately above Settings rather than waiting for Settings to close.
+
+When you explicitly ask a friend to remember something, Aura writes that fact to the friend’s private Obsidian-compatible Markdown vault before replying. Relevant notes are recalled into later chats with that same friend. The memory sheet can open the vault folder directly; the global and each friend vault keep their own `MEMORY.md` index and individual Markdown notes.
 
 The Korean edition reuses the established Korean personality prompts from the Electron app, and enforces Korean replies for normal chat and tool-assisted work unless a user explicitly requests another language.
 

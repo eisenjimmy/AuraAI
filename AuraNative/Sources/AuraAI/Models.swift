@@ -176,6 +176,8 @@ struct AuraSettings: Codable, Equatable {
     var authorizedFolderPaths: [String] = []
     var agentModeEnabled = false
     /// Optional for backward-compatible decoding of earlier settings files.
+    var defaultRosterRevision: Int?
+    /// Optional for backward-compatible decoding of earlier settings files.
     var skillSettings: AgentSkillSettings?
 }
 
@@ -189,6 +191,7 @@ enum TeamRole: String, Codable, CaseIterable, Identifiable {
     case strategist
     case designer
     case operations
+    case familyDoctor
 
     var id: String { rawValue }
 
@@ -203,6 +206,7 @@ enum TeamRole: String, Codable, CaseIterable, Identifiable {
         case .strategist: return auraText("Product Strategy", "제품 전략")
         case .designer: return auraText("Design & Vision", "디자인과 비전")
         case .operations: return auraText("Operations", "운영")
+        case .familyDoctor: return auraText("Family Medicine", "가정의학과 의사")
         }
     }
 
@@ -217,6 +221,7 @@ enum TeamRole: String, Codable, CaseIterable, Identifiable {
         case .strategist: return "bolt.fill"
         case .designer: return "square.3.layers.3d"
         case .operations: return "checklist"
+        case .familyDoctor: return "stethoscope"
         }
     }
 
@@ -240,6 +245,8 @@ enum TeamRole: String, Codable, CaseIterable, Identifiable {
             return auraText("You are a product designer and visionary. Start from the essential user experience, remove noise, and make visual and product tradeoffs explicit.", "당신은 제품 디자이너이자 비저너리입니다. 본질적인 사용자 경험에서 시작해 불필요한 요소를 덜어내고 시각적, 제품적 절충을 분명히 하세요.")
         case .operations:
             return auraText("You are an operations specialist. Make processes concrete, measurable, and easy to run repeatedly.", "당신은 운영 전문가입니다. 프로세스를 구체적이고 측정 가능하며 반복 실행하기 쉽게 만드세요.")
+        case .familyDoctor:
+            return auraText("You are a careful family medicine guide. Explain common health topics, prevention, and when to seek care without diagnosing or replacing a clinician.", "당신은 신중한 가정의학과 안내자입니다. 진단이나 진료를 대체하지 않으면서 흔한 건강 문제, 예방, 진료가 필요한 시점을 설명하세요.")
         }
     }
 }
@@ -287,7 +294,8 @@ extension TeamMember {
         "Keep Max's direct, loyal, practical style. You are the friend's friend who can diagnose Macs, networks, and tooling without drama.",
         "Keep Gilleon's decisive inventor-founder personality. Your specialty is product and engineering strategy; challenge fuzzy plans, but stay loyal to the person.",
         "Keep Neir's quiet, exacting designer personality. Your specialty is product design and vision; start by asking what should be removed.",
-        "You are Avery, a thoughtful, plain-spoken friend with legal research expertise. Explain risks and options in human language, never replace licensed local counsel, and do not become cold or alarmist."
+        "You are Avery, a thoughtful, plain-spoken friend with legal research expertise. Explain risks and options in human language, never replace licensed local counsel, and do not become cold or alarmist.",
+        "You are Dr. Maya, a grounded family-medicine friend. Help people make sense of everyday symptoms, prevention, routine care, medication questions, and what to ask a clinician. Do not diagnose, prescribe, or tell someone to delay professional care. Ask only the most relevant follow-up questions. Clearly recommend urgent or emergency care for red flags such as chest pain, severe trouble breathing, sudden weakness or confusion, fainting, severe allergic reactions, or thoughts of self-harm. Speak plainly, calmly, and without alarmism."
     ]
 
     // These are the established Korean personas from the Electron edition.
@@ -397,9 +405,21 @@ extension TeamMember {
         """
     ]
 
+    private static let koreanFamilyDoctorPrompt = """
+    당신은 다온입니다. 차분하고 현실적인 가정의학과 의사 친구입니다.
+
+    역할: 흔한 증상, 생활 습관, 예방접종과 검진, 만성질환 관리, 복약 관련 질문을 이해하기 쉽게 정리합니다. 사용자가 진료실에서 무엇을 물어볼지 준비하도록 돕고, 불확실한 부분은 솔직하게 구분합니다.
+
+    안전: 당신은 실제 진료, 진단, 처방을 대체하지 않습니다. 특정 질환이라고 단정하거나 약을 시작·중단·변경하라고 지시하지 마세요. 흉통, 심한 호흡곤란, 갑작스러운 마비·혼돈, 실신, 심한 알레르기 반응, 자해 생각처럼 위험 신호가 있으면 망설이지 말고 응급실이나 지역 응급 도움을 권하세요.
+
+    말투: 차분하고 따뜻하지만 과장하지 않습니다. 필요한 질문은 핵심만 짧게 하고, 가능한 다음 행동을 우선순위로 정리합니다. 불안을 키우지 않되 위험을 축소하지도 않습니다.
+
+    중요: 항상 자연스러운 한국어로 답하세요. 한국의 동네 병원, 건강검진, 가족 돌봄 맥락을 이해하되 개인의 상황을 단정하지 마세요.
+    """
+
     static var defaults: [TeamMember] {
         let korean = AuraEdition.current == .korean
-        let names = korean ? ["하나", "서윤", "재민", "은별", "민준", "길온", "나이르", "유진"] : ["Nova", "Sage", "Rio", "Luna", "Max", "Gilleon", "Neir", "Avery"]
+        let names = korean ? ["하나", "서윤", "재민", "은별", "민준", "길온", "나이르", "유진", "다온"] : ["Nova", "Sage", "Rio", "Luna", "Max", "Gilleon", "Neir", "Avery", "Dr. Maya"]
         let suffix = korean ? "-ko" : ""
         return [
             member("F8ED3AB5-9DB7-40F2-908D-5DE50CF6C97F", names[0], .chiefOfStaff, korean ? "햇살 같은 에너지. 팀의 중심을 잡아줌." : "Your hype-friend, now with a knack for making the next move clear.", "nova\(suffix)", prompt(korean, 0)),
@@ -409,9 +429,13 @@ extension TeamMember {
             member("2918F4FC-5A2D-4A50-A44D-42E438D1DD0C", names[4], .itSpecialist, korean ? "돌려 말하지 않음. 시스템은 바로 잡음." : "Straight answers for the systems that need fixing.", "max\(suffix)", prompt(korean, 4)),
             member("B339E6E4-8C2B-4E35-A7B3-757740B0D4EB", names[5], .strategist, korean ? "발명가형 창업자. 제약조건부터 봄." : "Brilliant inventor energy for product and engineering bets.", "gilleon\(suffix)", prompt(korean, 5)),
             member("5DB8AB4D-EFEE-4A3A-A787-811EDC7F45D3", names[6], .designer, korean ? "비전 먼저. 소음은 덜어냄." : "Minimalist design instinct, with a clear point of view.", "neir\(suffix)", prompt(korean, 6)),
-            member("100D74C3-4658-49AC-B1E9-B3E65E410D10", names[7], .counsel, korean ? "차분하게 위험을 읽고, 선택지를 정리함." : "A steady friend for legal and risk questions.", korean ? "korean-woman" : "european-woman", prompt(korean, 7))
+            member("100D74C3-4658-49AC-B1E9-B3E65E410D10", names[7], .counsel, korean ? "차분하게 위험을 읽고, 선택지를 정리함." : "A steady friend for legal and risk questions.", korean ? "korean-woman" : "european-woman", prompt(korean, 7)),
+            member("46CBFD52-7870-49AA-AB17-6A4DA03EB700", names[8], .familyDoctor, korean ? "생활 건강부터 진료가 필요한 신호까지 차분하게 봄." : "Calm family-medicine guidance for everyday health questions.", nil, prompt(korean, 8))
         ]
     }
+
+    static let currentDefaultRosterRevision = 1
+    static var doctorDefault: TeamMember { defaults.first { $0.role == .familyDoctor }! }
 
     static func migratingKoreanLegacyPrompts(_ members: [TeamMember]) -> [TeamMember] {
         guard AuraEdition.current == .korean else { return members }
@@ -426,7 +450,8 @@ extension TeamMember {
     }
 
     private static func prompt(_ korean: Bool, _ index: Int) -> String {
-        korean ? koreanPersonalityPrompts[index] : currentEnglishNativePrompts[index]
+        if korean && index == 8 { return koreanFamilyDoctorPrompt }
+        return korean ? koreanPersonalityPrompts[index] : currentEnglishNativePrompts[index]
     }
 
     static let legacyNativeNames: Set<String> = ["Arden", "Rowan", "Mira", "Sora", "Elliot", "Jun", "Tess"]
@@ -436,7 +461,7 @@ extension TeamMember {
         _ name: String,
         _ role: TeamRole,
         _ tagline: String,
-        _ asset: String,
+        _ asset: String?,
         _ instructions: String
     ) -> TeamMember {
         TeamMember(

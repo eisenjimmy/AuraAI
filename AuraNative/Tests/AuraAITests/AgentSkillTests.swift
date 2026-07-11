@@ -32,4 +32,10 @@ final class AgentSkillTests: XCTestCase {
         XCTAssertFalse(effective.isEnabled(.word))
         XCTAssertTrue(effective.isEnabled(.spreadsheet))
     }
+
+    func testDefaultTeamIncludesFamilyDoctor() {
+        let doctor = TeamMember.defaults.first { $0.role == .familyDoctor }
+        XCTAssertEqual(doctor?.name, "Dr. Maya")
+        XCTAssertTrue(doctor?.systemPrompt.contains("family-medicine") ?? false)
+    }
 }

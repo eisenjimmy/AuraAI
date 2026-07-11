@@ -196,9 +196,15 @@ struct AuraWorkspaceView: View {
         .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 420)
         .sheet(isPresented: $isShowingAddMember) { AddMemberSheet() }
         .sheet(isPresented: $store.isShowingSettings) { SettingsView() }
-        .sheet(isPresented: $store.isShowingGlobalMemory) { MemoryEditor(title: auraText("Global memory", "공통 기억"), text: store.globalMemory) { store.saveGlobalMemory($0) } }
+        .sheet(isPresented: $store.isShowingGlobalMemory) {
+            MemoryEditor(title: auraText("Global memory", "공통 기억"), text: store.globalMemory, vaultURL: store.globalMemoryVaultURL) {
+                store.saveGlobalMemory($0)
+            }
+        }
         .sheet(item: $store.memoryMember) { member in
-            MemoryEditor(title: auraText("What \(member.name) remembers", "\(member.name)이 기억하는 내용"), text: store.memberMemory(member)) { store.saveMemberMemory($0, member: member) }
+            MemoryEditor(title: auraText("What \(member.name) remembers", "\(member.name)이 기억하는 내용"), text: store.memberMemory(member), vaultURL: store.memberMemoryVaultURL(member)) {
+                store.saveMemberMemory($0, member: member)
+            }
         }
         .sheet(item: $store.editingMember) { member in FriendEditor(member: member) }
         .sheet(item: $store.pendingPrivacy) { review in PrivacyReviewSheet(review: review) }
@@ -346,6 +352,7 @@ struct TeamAvatar: View {
         case .strategist: return .red
         case .designer: return .gray
         case .operations: return .green
+        case .familyDoctor: return .mint
         }
     }
 }
@@ -514,6 +521,7 @@ private struct MessageBubble: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
+            if message.role == .user { Spacer(minLength: 50) }
             if message.role == .assistant { TeamAvatar(member: member, size: 28) }
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 5) {
                 Text(message.role == .user ? auraText("You", "나") : message.role == .assistant ? member.name : auraText("Aura tool", "Aura 도구"))
@@ -536,7 +544,7 @@ private struct MessageBubble: View {
                     }
                 }
             }
-            if message.role == .user { Spacer(minLength: 50) } else { Spacer() }
+            if message.role != .user { Spacer() }
         }
         .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
     }
@@ -757,7 +765,7 @@ struct SettingsView: View {
             FriendEditor(member: member)
         }
         .sheet(item: $memoryMember) { member in
-            MemoryEditor(title: auraText("What \(member.name) remembers", "\(member.name)이 기억하는 내용"), text: store.memberMemory(member)) {
+            MemoryEditor(title: auraText("What \(member.name) remembers", "\(member.name)이 기억하는 내용"), text: store.memberMemory(member), vaultURL: store.memberMemoryVaultURL(member)) {
                 store.saveMemberMemory($0, member: member)
             }
         }
@@ -1045,11 +1053,13 @@ private struct MemoryEditor: View {
     @Environment(\.dismiss) private var dismiss
     var title: String
     @State private var text: String
+    var vaultURL: URL?
     var save: (String) -> Void
 
-    init(title: String, text: String, save: @escaping (String) -> Void) {
+    init(title: String, text: String, vaultURL: URL? = nil, save: @escaping (String) -> Void) {
         self.title = title
         _text = State(initialValue: text)
+        self.vaultURL = vaultURL
         self.save = save
     }
 
@@ -1060,6 +1070,11 @@ private struct MemoryEditor: View {
                 .font(.body)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
             HStack {
+                if let vaultURL {
+                    Button(auraText("Open Markdown vault", "Markdown 보관함 열기")) {
+                        NSWorkspace.shared.open(vaultURL)
+                    }
+                }
                 Spacer()
                 Button(auraText("Cancel", "취소")) { dismiss() }
                 Button(auraText("Save", "저장")) { save(text); dismiss() }.buttonStyle(.borderedProminent)

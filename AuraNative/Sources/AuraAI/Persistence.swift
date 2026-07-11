@@ -60,6 +60,16 @@ final class AuraPersistence {
     func memberMemory(_ memberID: UUID) -> String { loadText("memory/members/\(memberID.uuidString).md") }
     func saveMemberMemory(_ text: String, memberID: UUID) { saveText(text, to: "memory/members/\(memberID.uuidString).md") }
 
+    var memoryVaultRoot: URL { root.appendingPathComponent("memory-vault", isDirectory: true) }
+    func globalMemoryVault() -> MarkdownMemoryVault {
+        MarkdownMemoryVault(root: memoryVaultRoot.appendingPathComponent("global", isDirectory: true))
+    }
+    func memberMemoryVault(_ memberID: UUID) -> MarkdownMemoryVault {
+        MarkdownMemoryVault(root: memoryVaultRoot
+            .appendingPathComponent("characters", isDirectory: true)
+            .appendingPathComponent(memberID.uuidString, isDirectory: true))
+    }
+
     func importAvatar(from source: URL, memberID: UUID) -> String? {
         let allowed = ["png", "jpg", "jpeg", "webp", "gif"]
         let ext = source.pathExtension.lowercased()

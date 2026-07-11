@@ -27,6 +27,13 @@ a permissioned agent harness for practical document work.
   folder. Omitted document paths fall back to a safe title-derived filename.
 - Right-clicking a friend opens memory or a Friend Editor for bundled template
   portraits, custom photo upload, specialty, tagline, and personality.
+- Explicit “remember” requests are written before reply to a private,
+  Obsidian-compatible Markdown vault for that friend. Later related questions
+  receive recalled notes from that vault only. Each vault contains individual
+  Markdown notes and a `MEMORY.md` index, and can be opened from Memory.
+- The default roster includes Dr. Maya (다온 in the Korean edition), a
+  safety-bounded Family Medicine guide for everyday health questions,
+  prevention, and care escalation.
 - The Korean edition reuses its full Korean persona prompts from the Electron
   source and requires Korean responses unless the user requests another
   language. Document tools attach their output to the final assistant reply.

@@ -123,6 +123,7 @@ struct AgentHarness {
         \(targetInstruction)
         You may inspect the selected workspace and only the additional folders above with list_files and read_file. You cannot see Downloads, Desktop, Documents, or any other folder unless it is explicitly approved. If the user asks about one of those folders, call request_folder_access first. Do not substitute the workspace for the requested folder.
         File writes and shell commands remain limited to the selected workspace. Computer control requires visible user approval. Never claim you saw, read, or changed anything unless a tool result confirms the exact target.
+        Aura keeps durable private Markdown memories for each friend. Use recalled character memory as known context. When the user asks you to remember a fact, acknowledge that it is saved; do not claim that Aura is inherently stateless.
 
         To use one tool, reply with only:
         <tool_call>{"name":"\(toolNames)","arguments":{...}}</tool_call>
@@ -138,7 +139,7 @@ struct AgentHarness {
             messages.append(ModelMessage(role: "system", content: "Shared user memory:\n\(globalMemory)"))
         }
         if !memberMemory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            messages.append(ModelMessage(role: "system", content: "Your private character memory:\n\(memberMemory)"))
+            messages.append(ModelMessage(role: "system", content: "Your private character Markdown memory:\n\(memberMemory)"))
         }
         messages += history.suffix(12).map { ModelMessage(role: $0.role.rawValue, content: $0.modelContent) }
         messages.append(ModelMessage(role: "user", content: userPrompt))

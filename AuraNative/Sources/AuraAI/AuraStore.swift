@@ -37,6 +37,7 @@ final class AuraStore: ObservableObject {
         }
         settings = loadedSettings
         members = persistence.loadMembers()
+        migrateDefaultRosterIfNeeded()
         selectedMemberID = members.first?.id
         loadConversation()
     }
@@ -46,6 +47,8 @@ final class AuraStore: ObservableObject {
     func effectiveSkills(for member: TeamMember) -> AgentSkillSettings { skillSettings.limited(to: member) }
 
     var globalMemory: String { persistence.globalMemory() }
+    var globalMemoryVaultURL: URL { persistence.globalMemoryVault().url }
+    func memberMemoryVaultURL(_ member: TeamMember) -> URL { persistence.memberMemoryVault(member.id).url }
 
     func select(_ member: TeamMember) {
         selectedMemberID = member.id
@@ -96,6 +99,17 @@ final class AuraStore: ObservableObject {
         selectedMemberID = initialTeam.first?.id
         persistence.saveMembers(initialTeam)
         loadConversation()
+    }
+
+    private func migrateDefaultRosterIfNeeded() {
+        guard (settings.defaultRosterRevision ?? 0) < TeamMember.currentDefaultRosterRevision else { return }
+        let doctor = TeamMember.doctorDefault
+        if !members.contains(where: { $0.id == doctor.id }) {
+            members.append(doctor)
+            persistence.saveMembers(members)
+        }
+        settings.defaultRosterRevision = TeamMember.currentDefaultRosterRevision
+        saveSettings()
     }
 
     func chooseWorkspace() {
@@ -250,6 +264,20 @@ final class AuraStore: ObservableObject {
     func saveMemberMemory(_ text: String, member: TeamMember) { persistence.saveMemberMemory(text, memberID: member.id) }
     func memberMemory(_ member: TeamMember) -> String { persistence.memberMemory(member.id) }
 
+    private func memberMemoryContext(for member: TeamMember, query: String) -> String {
+        let vault = persistence.memberMemoryVault(member.id)
+        _ = vault.captureIfRequested(query)
+        let notes = vault.recall(query)
+        let manualMemory = memberMemory(member)
+        let recalled = notes.map { "- \($0.body)" }.joined(separator: "\n")
+        return [
+            manualMemory.isEmpty ? nil : "Private memory:\n\(manualMemory)",
+            recalled.isEmpty ? nil : "Recalled private Markdown memories:\n\(recalled)"
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\n\n")
+    }
+
     private func loadConversation() {
         guard let selectedMemberID else { messages = []; return }
         messages = persistence.loadConversation(memberID: selectedMemberID)
@@ -267,7 +295,7 @@ final class AuraStore: ObservableObject {
         let history = messages.dropLast()
         let config = settings.provider
         let globalMemory = globalMemory
-        let privateMemory = memberMemory(member)
+        let privateMemory = memberMemoryContext(for: member, query: text)
         let workspace = settings.workspacePath.isEmpty ? nil : URL(fileURLWithPath: settings.workspacePath)
         let authorizedFolders = settings.authorizedFolderPaths.map { URL(fileURLWithPath: $0) }
         let agentMode = settings.agentModeEnabled
@@ -294,7 +322,11 @@ final class AuraStore: ObservableObject {
                     response = result.response
                     responseAttachments = result.attachments
                 } else {
-                    let system = [AuraEdition.current.responseLanguageInstruction, member.systemPrompt, globalMemory.isEmpty ? nil : "Shared user memory:\n\(globalMemory)", privateMemory.isEmpty ? nil : "Your private memory:\n\(privateMemory)"]
+                    let memoryInstruction = auraText(
+                        "Aura has durable Markdown memory for this friend. Treat the recalled notes as known context. If the user asks you to remember a fact, acknowledge that it is saved; never claim that you are inherently stateless.",
+                        "Aura는 이 친구별로 지속되는 Markdown 기억을 저장합니다. 떠올린 메모를 알고 있는 맥락으로 사용하세요. 사용자가 기억해 달라고 하면 저장되었다고 짧게 확인하고, 기억이 전혀 없거나 본질적으로 무상태라고 말하지 마세요."
+                    )
+                    let system = [AuraEdition.current.responseLanguageInstruction, memoryInstruction, member.systemPrompt, globalMemory.isEmpty ? nil : "Shared user memory:\n\(globalMemory)", privateMemory.isEmpty ? nil : privateMemory]
                         .compactMap { $0 }
                         .joined(separator: "\n\n")
                     let modelMessages = [ModelMessage(role: "system", content: system)]
