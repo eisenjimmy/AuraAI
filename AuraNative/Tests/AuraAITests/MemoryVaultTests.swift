@@ -23,4 +23,15 @@ final class MemoryVaultTests: XCTestCase {
         XCTAssertNil(vault.captureIfRequested("What is the weather today?"))
         XCTAssertTrue(vault.list().isEmpty)
     }
+
+    func testExpiringMemoryStoresExpirationMetadata() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let vault = MarkdownMemoryVault(root: root)
+
+        let note = vault.save(body: "Use the temporary project name this week.", retention: .sevenDays)
+
+        XCTAssertNotNil(note.expiresAt)
+        XCTAssertNotNil(vault.list().first?.expiresAt)
+    }
 }

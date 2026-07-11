@@ -263,7 +263,9 @@ Settings uses a stable 720 x 600 layout so switching tabs does not resize or rec
 
 Right-click any friend in the sidebar and choose **Edit friend** to open the native Friend Editor. It can restore any bundled template portrait, import a custom photo, and configure the friend's name, specialty, tagline, personality instructions, and allowed skills. **Open memory** remains available from the same context menu. Editing or opening memory from **Settings > Friends** opens immediately above Settings rather than waiting for Settings to close.
 
-When you explicitly ask a friend to remember something, Aura writes that fact to the friend’s private Obsidian-compatible Markdown vault before replying. Relevant notes are recalled into later chats with that same friend. The memory sheet can open the vault folder directly; the global and each friend vault keep their own `MEMORY.md` index and individual Markdown notes.
+When you explicitly ask a friend to remember something, Aura writes that fact to the friend’s private Obsidian-compatible Markdown vault before replying. Relevant notes are recalled into later chats with that same friend. The memory sheet shows the actual notes, lets you add or delete long-term and expiring memories, and can open the vault folder directly. The global and each friend vault keep their own `MEMORY.md` index and individual Markdown notes.
+
+Excel and spreadsheet requests automatically enter Aura’s document workflow when the Excel skill is enabled. Aura accepts common tool-call shapes such as `headers` or `columns`, writes a real workbook to the configured Aura write folder after approval, and shows it as a clickable chat attachment. If a local model describes a spreadsheet instead of issuing a tool call, Aura generates a fallback workbook from the attached text.
 
 The Korean edition reuses the established Korean personality prompts from the Electron app, and enforces Korean replies for normal chat and tool-assisted work unless a user explicitly requests another language.
 

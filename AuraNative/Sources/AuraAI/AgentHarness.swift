@@ -61,6 +61,14 @@ struct AgentHarness {
         for _ in 0..<maximumSteps {
             let reply = try await client.complete(messages: transcript, configuration: configuration)
             guard let call = ToolCall.parse(reply) else {
+                if skills.isEnabled(.spreadsheet), SpreadsheetIntent.isRequested(userPrompt) {
+                    let execution = try await AgentToolExecutor.spreadsheetFallback(
+                        prompt: userPrompt,
+                        workspace: workspace,
+                        approval: approval
+                    )
+                    return AgentRunResult(response: execution.output, attachments: execution.attachments)
+                }
                 return AgentRunResult(response: reply, attachments: generatedAttachments)
             }
             let execution = try await AgentToolExecutor.execute(
@@ -166,6 +174,13 @@ enum AgentFolderIntent {
         if lowercased.contains("desktop") || text.contains("바탕화면") { return "Desktop" }
         if lowercased.contains("documents") || text.contains("문서") { return "Documents" }
         return nil
+    }
+}
+
+enum SpreadsheetIntent {
+    static func isRequested(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("excel") || lower.contains("spreadsheet") || lower.contains(".xlsx") || text.contains("엑셀")
     }
 }
 
@@ -334,8 +349,11 @@ private enum AgentToolExecutor {
             let title = AgentArtifactPath.title(from: call.arguments, fallback: auraText("Aura summary", "Aura 요약"))
             let path = AgentArtifactPath.path(from: call.arguments, title: title, fileExtension: "xlsx")
             let sheet = call.arguments["sheet"]?.stringValue ?? "Summary"
-            let headers = try requiredArray("headers", call.arguments).compactMap(\.stringValue)
-            let rows = try requiredArray("rows", call.arguments).compactMap(\.arrayValue)
+            let headers = (optionalArray(["headers", "columns", "fields"], call.arguments) ?? [])
+                .map(\.displayText)
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            let rows = (optionalArray(["rows", "data"], call.arguments) ?? []).compactMap(\.arrayValue)
+            guard !headers.isEmpty else { throw LLMClientError.badResponse("Spreadsheet requires a headers or columns array.") }
             let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
             let allowed = await approval(AgentApproval(
                 kind: .writeFile,
@@ -420,6 +438,40 @@ private enum AgentToolExecutor {
             throw LLMClientError.badResponse("Tool requires a \(key) array.")
         }
         return value
+    }
+
+    private static func optionalArray(_ keys: [String], _ values: [String: JSONValue]) -> [JSONValue]? {
+        keys.lazy.compactMap { values[$0]?.arrayValue }.first
+    }
+
+    static func spreadsheetFallback(
+        prompt: String,
+        workspace: URL?,
+        approval: @escaping @MainActor (AgentApproval) async -> Bool
+    ) async throws -> ToolExecution {
+        let lines = prompt
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("<") && !$0.hasPrefix("The following attachments") }
+            .prefix(500)
+        let isCharacterList = prompt.lowercased().contains("character") || prompt.contains("등장인물")
+        let title = auraText(isCharacterList ? "Character list" : "Aura spreadsheet", isCharacterList ? "등장인물 목록" : "Aura 요약")
+        let path = AgentArtifactPath.path(from: [:], title: title, fileExtension: "xlsx")
+        let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
+        let headers = [auraText(isCharacterList ? "Character or source text" : "Source text", isCharacterList ? "등장인물 또는 원문" : "원문")]
+        let rows = lines.map { [JSONValue.string($0)] }
+        let allowed = await approval(AgentApproval(
+            kind: .writeFile,
+            title: "Create \(file.lastPathComponent)",
+            detail: "\(title)\n\(rows.count) rows extracted from the request"
+        ))
+        guard allowed else { return ToolExecution(output: "User declined the Excel workbook write.", grantedFolder: nil) }
+        try ArtifactWriter.spreadsheet(title: title, sheetName: "Summary", headers: headers, rows: rows, to: file)
+        return ToolExecution(
+            output: auraText("Created Excel workbook at \(file.path).", "Excel 워크북을 \(file.path)에 만들었습니다."),
+            grantedFolder: nil,
+            attachments: [generatedAttachment(file, kind: "Excel workbook")]
+        )
     }
 
     private static func presentationSlides(from values: [JSONValue]) throws -> [PresentationSlide] {

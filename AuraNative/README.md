@@ -29,8 +29,12 @@ a permissioned agent harness for practical document work.
   portraits, custom photo upload, specialty, tagline, and personality.
 - Explicit “remember” requests are written before reply to a private,
   Obsidian-compatible Markdown vault for that friend. Later related questions
-  receive recalled notes from that vault only. Each vault contains individual
+  receive recalled notes from that vault only. Memory shows actual vault notes
+  and supports long-term or expiring entries. Each vault contains individual
   Markdown notes and a `MEMORY.md` index, and can be opened from Memory.
+- Spreadsheet intent automatically enters the approved document flow. Aura
+  accepts common table argument aliases and attaches the real workbook reply;
+  it falls back to a source-text workbook when a local model omits its tool call.
 - The default roster includes Dr. Maya (다온 in the Korean edition), a
   safety-bounded Family Medicine guide for everyday health questions,
   prevention, and care escalation.

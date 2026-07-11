@@ -37,6 +37,7 @@ final class AuraStore: ObservableObject {
         }
         settings = loadedSettings
         members = persistence.loadMembers()
+        migrateLegacyMemoryIntoVaults()
         migrateDefaultRosterIfNeeded()
         selectedMemberID = members.first?.id
         loadConversation()
@@ -49,6 +50,8 @@ final class AuraStore: ObservableObject {
     var globalMemory: String { persistence.globalMemory() }
     var globalMemoryVaultURL: URL { persistence.globalMemoryVault().url }
     func memberMemoryVaultURL(_ member: TeamMember) -> URL { persistence.memberMemoryVault(member.id).url }
+    func globalMemoryVault() -> MarkdownMemoryVault { persistence.globalMemoryVault() }
+    func memberMemoryVault(_ member: TeamMember) -> MarkdownMemoryVault { persistence.memberMemoryVault(member.id) }
 
     func select(_ member: TeamMember) {
         selectedMemberID = member.id
@@ -278,6 +281,33 @@ final class AuraStore: ObservableObject {
         .joined(separator: "\n\n")
     }
 
+    private func globalMemoryContext(query: String) -> String {
+        let notes = persistence.globalMemoryVault().recall(query)
+        let legacyMemory = globalMemory
+        let recalled = notes.map { "- \($0.body)" }.joined(separator: "\n")
+        return [
+            legacyMemory.isEmpty ? nil : "Shared memory:\n\(legacyMemory)",
+            recalled.isEmpty ? nil : "Recalled shared Markdown memories:\n\(recalled)"
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\n\n")
+    }
+
+    private func migrateLegacyMemoryIntoVaults() {
+        let shared = persistence.globalMemory()
+        if !shared.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            _ = persistence.globalMemoryVault().save(body: shared)
+            persistence.saveGlobalMemory("")
+        }
+        for member in members {
+            let legacy = persistence.memberMemory(member.id)
+            if !legacy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                _ = persistence.memberMemoryVault(member.id).save(body: legacy)
+                persistence.saveMemberMemory("", memberID: member.id)
+            }
+        }
+    }
+
     private func loadConversation() {
         guard let selectedMemberID else { messages = []; return }
         messages = persistence.loadConversation(memberID: selectedMemberID)
@@ -294,12 +324,12 @@ final class AuraStore: ObservableObject {
 
         let history = messages.dropLast()
         let config = settings.provider
-        let globalMemory = globalMemory
+        let globalMemory = globalMemoryContext(query: text)
         let privateMemory = memberMemoryContext(for: member, query: text)
         let workspace = settings.workspacePath.isEmpty ? nil : URL(fileURLWithPath: settings.workspacePath)
         let authorizedFolders = settings.authorizedFolderPaths.map { URL(fileURLWithPath: $0) }
-        let agentMode = settings.agentModeEnabled
         let skills = effectiveSkills(for: member)
+        let agentMode = settings.agentModeEnabled || (skills.isEnabled(.spreadsheet) && SpreadsheetIntent.isRequested(text))
 
         Task {
             do {

@@ -197,14 +197,10 @@ struct AuraWorkspaceView: View {
         .sheet(isPresented: $isShowingAddMember) { AddMemberSheet() }
         .sheet(isPresented: $store.isShowingSettings) { SettingsView() }
         .sheet(isPresented: $store.isShowingGlobalMemory) {
-            MemoryEditor(title: auraText("Global memory", "공통 기억"), text: store.globalMemory, vaultURL: store.globalMemoryVaultURL) {
-                store.saveGlobalMemory($0)
-            }
+            MemoryVaultSheet(title: auraText("Global memory", "공통 기억"), vault: store.globalMemoryVault())
         }
         .sheet(item: $store.memoryMember) { member in
-            MemoryEditor(title: auraText("What \(member.name) remembers", "\(member.name)이 기억하는 내용"), text: store.memberMemory(member), vaultURL: store.memberMemoryVaultURL(member)) {
-                store.saveMemberMemory($0, member: member)
-            }
+            MemoryVaultSheet(title: auraText("What \(member.name) remembers", "\(member.name)이 기억하는 내용"), vault: store.memberMemoryVault(member))
         }
         .sheet(item: $store.editingMember) { member in FriendEditor(member: member) }
         .sheet(item: $store.pendingPrivacy) { review in PrivacyReviewSheet(review: review) }
@@ -765,9 +761,7 @@ struct SettingsView: View {
             FriendEditor(member: member)
         }
         .sheet(item: $memoryMember) { member in
-            MemoryEditor(title: auraText("What \(member.name) remembers", "\(member.name)이 기억하는 내용"), text: store.memberMemory(member), vaultURL: store.memberMemoryVaultURL(member)) {
-                store.saveMemberMemory($0, member: member)
-            }
+            MemoryVaultSheet(title: auraText("What \(member.name) remembers", "\(member.name)이 기억하는 내용"), vault: store.memberMemoryVault(member))
         }
         .onDisappear { store.saveSettings() }
     }
@@ -1049,39 +1043,93 @@ private struct FriendEditor: View {
     }
 }
 
-private struct MemoryEditor: View {
+private struct MemoryVaultSheet: View {
     @Environment(\.dismiss) private var dismiss
     var title: String
-    @State private var text: String
-    var vaultURL: URL?
-    var save: (String) -> Void
+    let vault: MarkdownMemoryVault
+    @State private var notes: [MarkdownMemoryNote]
+    @State private var draft = ""
+    @State private var retention: MemoryRetention = .longTerm
 
-    init(title: String, text: String, vaultURL: URL? = nil, save: @escaping (String) -> Void) {
+    init(title: String, vault: MarkdownMemoryVault) {
         self.title = title
-        _text = State(initialValue: text)
-        self.vaultURL = vaultURL
-        self.save = save
+        self.vault = vault
+        _notes = State(initialValue: vault.list())
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.title2.weight(.semibold))
-            TextEditor(text: $text)
-                .font(.body)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
-            HStack {
-                if let vaultURL {
-                    Button(auraText("Open Markdown vault", "Markdown 보관함 열기")) {
-                        NSWorkspace.shared.open(vaultURL)
+            Text(auraText("Long-term notes stay until you delete them. Expiring notes disappear automatically after their selected time.", "장기 기억은 직접 삭제할 때까지 유지됩니다. 만료 기억은 선택한 시간이 지나면 자동으로 사라집니다."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if notes.isEmpty {
+                ContentUnavailableView(auraText("No memories yet", "아직 기억이 없습니다"), systemImage: "brain.head.profile")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List {
+                    ForEach(notes, id: \.slug) { note in
+                        HStack(alignment: .top, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(note.body)
+                                    .lineLimit(3)
+                                Text(retentionLabel(note))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button {
+                                vault.delete(note)
+                                reload()
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(.plain)
+                            .help(auraText("Delete memory", "기억 삭제"))
+                        }
+                        .padding(.vertical, 3)
                     }
                 }
+                .listStyle(.inset)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                TextEditor(text: $draft)
+                    .font(.body)
+                    .frame(minHeight: 76)
+                    .padding(6)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+                HStack {
+                    Picker(auraText("Retention", "기억 기간"), selection: $retention) {
+                        ForEach(MemoryRetention.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    Spacer()
+                    Button(auraText("Remember", "기억하기")) {
+                        guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+                        _ = vault.save(body: draft, retention: retention)
+                        draft = ""
+                        reload()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            HStack {
+                Button(auraText("Open Markdown vault", "Markdown 보관함 열기")) { NSWorkspace.shared.open(vault.url) }
                 Spacer()
-                Button(auraText("Cancel", "취소")) { dismiss() }
-                Button(auraText("Save", "저장")) { save(text); dismiss() }.buttonStyle(.borderedProminent)
+                Button(auraText("Close", "닫기")) { dismiss() }
             }
         }
         .padding(20)
-        .frame(width: 620, height: 480)
+        .frame(width: 660, height: 560)
+    }
+
+    private func reload() { notes = vault.list() }
+
+    private func retentionLabel(_ note: MarkdownMemoryNote) -> String {
+        guard let expiresAt = note.expiresAt else { return auraText("Long-term memory", "장기 기억") }
+        return auraText("Expires \(expiresAt.formatted(date: .abbreviated, time: .omitted))", "\(expiresAt.formatted(date: .abbreviated, time: .omitted)) 만료")
     }
 }
 

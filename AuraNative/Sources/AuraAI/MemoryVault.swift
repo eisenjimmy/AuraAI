@@ -6,6 +6,29 @@ struct MarkdownMemoryNote: Equatable {
     var body: String
     var createdAt: Date
     var updatedAt: Date
+    var expiresAt: Date? = nil
+}
+
+enum MemoryRetention: String, CaseIterable, Identifiable {
+    case longTerm
+    case sevenDays
+    case thirtyDays
+
+    var id: String { rawValue }
+    var expiresAt: Date? {
+        switch self {
+        case .longTerm: return nil
+        case .sevenDays: return Calendar.current.date(byAdding: .day, value: 7, to: Date())
+        case .thirtyDays: return Calendar.current.date(byAdding: .day, value: 30, to: Date())
+        }
+    }
+    var title: String {
+        switch self {
+        case .longTerm: return auraText("Long-term", "장기 기억")
+        case .sevenDays: return auraText("Expires in 7 days", "7일 후 만료")
+        case .thirtyDays: return auraText("Expires in 30 days", "30일 후 만료")
+        }
+    }
 }
 
 /// Obsidian-compatible memory notes. Each friend owns a separate vault.
@@ -27,15 +50,28 @@ final class MarkdownMemoryVault {
         let body = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !body.isEmpty else { return nil }
 
+        return save(body: body, retention: inferredRetention(for: body))
+    }
+
+    @discardableResult
+    func save(body: String, retention: MemoryRetention = .longTerm) -> MarkdownMemoryNote {
+        let cleaned = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let now = Date()
         let note = MarkdownMemoryNote(
-            slug: "memory-\(stableID(body))",
-            title: String(body.prefix(80)),
-            body: body,
-            createdAt: Date(),
-            updatedAt: Date()
+            slug: "memory-\(stableID(cleaned))",
+            title: String(cleaned.prefix(80)),
+            body: cleaned,
+            createdAt: now,
+            updatedAt: now,
+            expiresAt: retention.expiresAt
         )
         save(note)
         return note
+    }
+
+    func delete(_ note: MarkdownMemoryNote) {
+        try? fileManager.removeItem(at: noteURL(note.slug))
+        writeIndex()
     }
 
     func recall(_ query: String, limit: Int = 4) -> [MarkdownMemoryNote] {
@@ -65,9 +101,14 @@ final class MarkdownMemoryVault {
             options: [.skipsHiddenFiles]
         ) else { return [] }
 
-        return files
+        let notes = files
             .filter { $0.pathExtension == "md" && $0.lastPathComponent != "MEMORY.md" }
             .compactMap(parse)
+        for note in notes where note.expiresAt.map({ $0 <= Date() }) == true {
+            try? fileManager.removeItem(at: noteURL(note.slug))
+        }
+        return notes
+            .filter { $0.expiresAt.map({ $0 > Date() }) ?? true }
             .sorted { $0.updatedAt > $1.updatedAt }
     }
 
@@ -79,7 +120,8 @@ final class MarkdownMemoryVault {
             title: note.title,
             body: note.body,
             createdAt: createdAt,
-            updatedAt: Date()
+            updatedAt: Date(),
+            expiresAt: note.expiresAt
         )
         let formatter = ISO8601DateFormatter()
         let text = """
@@ -89,6 +131,7 @@ final class MarkdownMemoryVault {
         importance: 3
         created: \(formatter.string(from: stored.createdAt))
         updated: \(formatter.string(from: stored.updatedAt))
+        \(stored.expiresAt.map { "expires: \(formatter.string(from: $0))" } ?? "")
         ---
 
         \(stored.body.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -124,7 +167,8 @@ final class MarkdownMemoryVault {
             title: fields["title"] ?? url.deletingPathExtension().lastPathComponent.replacingOccurrences(of: "-", with: " "),
             body: body,
             createdAt: fields["created"].flatMap(formatter.date(from:)) ?? fallback,
-            updatedAt: fields["updated"].flatMap(formatter.date(from:)) ?? fallback
+            updatedAt: fields["updated"].flatMap(formatter.date(from:)) ?? fallback,
+            expiresAt: fields["expires"].flatMap(formatter.date(from:))
         )
     }
 
@@ -146,6 +190,13 @@ final class MarkdownMemoryVault {
         let lower = text.lowercased()
         return lower.contains("remember") || lower.contains("keep in mind") || lower.contains("note that")
             || text.contains("기억해") || text.contains("기억해줘") || text.contains("기억해 둬") || text.contains("알아둬")
+    }
+
+    private func inferredRetention(for text: String) -> MemoryRetention {
+        let lower = text.lowercased()
+        if lower.contains("today") || lower.contains("temporary") || text.contains("오늘") || text.contains("잠깐") { return .sevenDays }
+        if lower.contains("this month") || text.contains("이번 달") { return .thirtyDays }
+        return .longTerm
     }
 
     private func terms(in text: String) -> Set<String> {

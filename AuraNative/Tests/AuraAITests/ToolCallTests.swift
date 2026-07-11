@@ -37,4 +37,10 @@ final class ToolCallTests: XCTestCase {
         XCTAssertEqual(title, "Aura summary")
         XCTAssertEqual(path, "Aura-summary.xlsx")
     }
+
+    func testRecognizesKoreanSpreadsheetIntent() {
+        XCTAssertTrue(SpreadsheetIntent.isRequested("이 PDF를 엑셀로 정리해줘"))
+        XCTAssertTrue(SpreadsheetIntent.isRequested("Create an Excel workbook"))
+        XCTAssertFalse(SpreadsheetIntent.isRequested("Explain this document"))
+    }
 }
