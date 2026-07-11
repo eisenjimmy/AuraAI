@@ -11,4 +11,18 @@ final class LLMClientTests: XCTestCase {
     func testKoreanEditionInstructionRequiresKoreanReply() {
         XCTAssertTrue(AuraEdition.korean.responseLanguageInstruction.contains("항상 자연스럽고 완전한 한국어"))
     }
+
+    func testMultimodalMessageUsesOpenAIImageParts() throws {
+        let message = ModelMessage(
+            role: "user",
+            content: "Describe the image.",
+            imageURLs: ["data:image/png;base64,AA=="]
+        )
+        let data = try JSONEncoder().encode([message])
+        let objects = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        let content = try XCTUnwrap(objects.first?["content"] as? [[String: Any]])
+        XCTAssertEqual(content[0]["type"] as? String, "text")
+        XCTAssertEqual(content[1]["type"] as? String, "image_url")
+        XCTAssertEqual((content[1]["image_url"] as? [String: String])?["url"], "data:image/png;base64,AA==")
+    }
 }

@@ -174,9 +174,6 @@ struct AuraSettings: Codable, Equatable {
     var workspacePath = ""
     /// Read-only folders the user explicitly selected for the agent harness.
     var authorizedFolderPaths: [String] = []
-    var agentModeEnabled = false
-    /// Per-friend conversation modes. Optional for migration from earlier settings.
-    var conversationModes: [String: ConversationMode]?
     /// Optional for backward-compatible decoding of earlier settings files.
     var defaultRosterRevision: Int?
     /// Optional for backward-compatible decoding of earlier settings files.
@@ -493,8 +490,28 @@ struct ConversationMessage: Identifiable, Codable, Equatable {
     var activity: String?
     var attachments: [ChatAttachment]?
 
+    var displayContent: String {
+        role == .assistant ? ToolProtocolSanitizer.userVisibleText(from: content) : content
+    }
+
     var modelContent: String {
-        AttachmentContext.compose(prompt: content, attachments: attachments ?? [])
+        AttachmentContext.compose(prompt: displayContent, attachments: attachments ?? [])
+    }
+}
+
+/// Tool markup is an internal protocol, never a user-facing response. This
+/// also safely recovers conversations saved by older app builds that leaked it.
+enum ToolProtocolSanitizer {
+    static func containsToolCall(in text: String) -> Bool {
+        text.range(of: "<tool_call", options: [.caseInsensitive]) != nil
+    }
+
+    static func userVisibleText(from text: String) -> String {
+        guard containsToolCall(in: text) else { return text }
+        return auraText(
+            "An earlier request did not complete, so no verified file was attached. Please ask again and I will create it safely.",
+            "이전 요청이 완료되지 않아 검증된 파일이 첨부되지 않았습니다. 다시 요청해 주시면 안전하게 만들어 드릴게요."
+        )
     }
 }
 
@@ -519,6 +536,13 @@ enum AttachmentContext {
         guard !attachments.isEmpty else { return prompt }
         var remainingUnits = max(0, tokenBudget * 4)
         let documents = attachments.compactMap { attachment -> String? in
+            if attachment.isImage {
+                return """
+                <aura_attachment name="\(attachment.fileName)" type="Image">
+                A visual image is attached separately for the vision model. Inspect the image itself; do not rely on OCR text.
+                </aura_attachment>
+                """
+            }
             guard remainingUnits > 0 else { return nil }
             let excerpt = boundedExcerpt(attachment.extractedText, remainingUnits: &remainingUnits)
             guard !excerpt.isEmpty else { return nil }
@@ -552,13 +576,88 @@ enum AttachmentContext {
     }
 }
 
+enum VisionAttachment {
+    private static let supportedExtensions: Set<String> = ["png", "jpg", "jpeg", "heic", "tiff", "tif", "bmp", "gif", "webp"]
+
+    static func dataURLs(for attachments: [ChatAttachment], limit: Int = 4) -> [String] {
+        attachments
+            .filter(\.isImage)
+            .prefix(limit)
+            .compactMap { attachment in
+                let url = URL(fileURLWithPath: attachment.storedPath)
+                let ext = url.pathExtension.lowercased()
+                guard supportedExtensions.contains(ext), let data = try? Data(contentsOf: url) else { return nil }
+                return "data:\(mimeType(for: ext));base64,\(data.base64EncodedString())"
+            }
+    }
+
+    private static func mimeType(for fileExtension: String) -> String {
+        switch fileExtension {
+        case "jpg", "jpeg": return "image/jpeg"
+        case "heic": return "image/heic"
+        case "tiff", "tif": return "image/tiff"
+        case "bmp": return "image/bmp"
+        case "gif": return "image/gif"
+        case "webp": return "image/webp"
+        default: return "image/png"
+        }
+    }
+}
+
 private extension Character {
     var isASCII: Bool { unicodeScalars.allSatisfy(\.isASCII) }
 }
 
-struct ModelMessage: Codable {
+struct ModelMessage: Encodable {
     var role: String
     var content: String
+    var imageURLs: [String] = []
+
+    init(role: String, content: String, imageURLs: [String] = []) {
+        self.role = role
+        self.content = content
+        self.imageURLs = imageURLs
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case role
+        case content
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(role, forKey: .role)
+        guard !imageURLs.isEmpty else {
+            try container.encode(content, forKey: .content)
+            return
+        }
+        let parts = [OpenAIMessagePart.text(content)] + imageURLs.map(OpenAIMessagePart.image)
+        try container.encode(parts, forKey: .content)
+    }
+}
+
+private struct OpenAIMessagePart: Encodable {
+    var type: String
+    var text: String?
+    var imageURL: ImageURL?
+
+    static func text(_ value: String) -> Self {
+        Self(type: "text", text: value, imageURL: nil)
+    }
+
+    static func image(_ value: String) -> Self {
+        Self(type: "image_url", text: nil, imageURL: ImageURL(url: value))
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case type
+        case text
+        case imageURL = "image_url"
+    }
+
+    struct ImageURL: Encodable {
+        var url: String
+    }
 }
 
 struct PrivacyMatch: Identifiable, Equatable {

@@ -20,6 +20,7 @@ struct AgentHarness {
         authorizedFolders: [URL],
         skills: AgentSkillSettings,
         requestedArtifact: ArtifactIntent?,
+        attachments: [ChatAttachment],
         requestFolder: @escaping @MainActor (String) async -> URL?,
         approval: @escaping @MainActor (AgentApproval) async -> Bool,
         onEvent: @escaping @MainActor (AgentHarnessEvent) -> Void = { _ in }
@@ -75,7 +76,8 @@ struct AgentHarness {
             workspace: workspace,
             authorizedFolders: readableFolders,
             skills: skills,
-            requiredFolder: requestedFolder
+            requiredFolder: requestedFolder,
+            attachments: attachments
         )
         if let initialFolderResult {
             transcript.append(internalToolResult(initialFolderResult))
@@ -92,7 +94,17 @@ struct AgentHarness {
             await onEvent(inferring)
             let reply = try await client.complete(messages: transcript, configuration: configuration)
             guard let call = ToolCall.parse(reply) else {
-                if let requestedArtifact, skills.isEnabled(requestedArtifact.skill) {
+                if let requestedArtifact, !skills.isEnabled(requestedArtifact.skill) {
+                    return AgentRunResult(
+                        response: auraText(
+                            "The \(requestedArtifact.skill.title) skill is turned off in Settings, so I did not create a file.",
+                            "설정에서 \(requestedArtifact.skill.title) 기능이 꺼져 있어 파일을 만들지 않았습니다."
+                        ),
+                        attachments: [],
+                        events: events
+                    )
+                }
+                if let requestedArtifact {
                     let fallback = AgentHarnessEvent(
                         kind: .toolRequested,
                         step: step,
@@ -101,28 +113,39 @@ struct AgentHarness {
                     )
                     events.append(fallback)
                     await onEvent(fallback)
-                    if let execution = try await fallbackExecution(
-                        for: requestedArtifact,
-                        prompt: artifactSource,
-                        workspace: workspace,
-                        approval: approval
-                    ) {
-                        if let failure = ArtifactValidator.validate(execution.attachments, expected: requestedArtifact, source: artifactSource) {
-                            let invalid = AgentHarnessEvent(
-                                kind: .failed,
-                                step: step,
-                                title: auraText("Generated file did not validate", "생성된 파일 검증에 실패했습니다"),
-                                detail: failure
-                            )
-                            events.append(invalid)
-                            await onEvent(invalid)
-                            return AgentRunResult(response: failure, attachments: [], events: events)
+                    do {
+                        if let execution = try await fallbackExecution(
+                            for: requestedArtifact,
+                            prompt: artifactSource,
+                            workspace: workspace,
+                            approval: approval
+                        ) {
+                            if let failure = ArtifactValidator.validate(execution.attachments, expected: requestedArtifact, source: artifactSource) {
+                                let invalid = AgentHarnessEvent(
+                                    kind: .failed,
+                                    step: step,
+                                    title: auraText("Generated file did not validate", "생성된 파일 검증에 실패했습니다"),
+                                    detail: failure
+                                )
+                                events.append(invalid)
+                                await onEvent(invalid)
+                                return AgentRunResult(response: failure, attachments: [], events: events)
+                            }
+                            let observation = AgentHarnessEvent.observation(for: execution, step: step)
+                            events.append(observation)
+                            await onEvent(observation)
+                            return AgentRunResult(response: execution.output, attachments: execution.attachments, events: events)
                         }
-                        let observation = AgentHarnessEvent.observation(for: execution, step: step)
-                        events.append(observation)
-                        await onEvent(observation)
-                        return AgentRunResult(response: execution.output, attachments: execution.attachments, events: events)
+                    } catch {
+                        return AgentRunResult(response: error.localizedDescription, attachments: [], events: events)
                     }
+                }
+                if ToolProtocolSanitizer.containsToolCall(in: reply) {
+                    return AgentRunResult(
+                        response: ToolProtocolSanitizer.userVisibleText(from: reply),
+                        attachments: generatedAttachments,
+                        events: events
+                    )
                 }
                 let completed = AgentHarnessEvent(
                     kind: .completed,
@@ -164,7 +187,7 @@ struct AgentHarness {
                 )
                 events.append(rejected)
                 await onEvent(rejected)
-                transcript.append(ModelMessage(role: "assistant", content: reply))
+                transcript.append(internalToolRequest(call))
                 transcript.append(internalToolResult(
                     "Refused: the user explicitly requested \(requestedArtifact.skill.title). Use \(requestedArtifact.skill.toolName), not \(call.name)."
                 ))
@@ -200,7 +223,7 @@ struct AgentHarness {
                 )
                 events.append(invalid)
                 await onEvent(invalid)
-                transcript.append(ModelMessage(role: "assistant", content: reply))
+                transcript.append(internalToolRequest(normalizedCall))
                 transcript.append(internalToolResult("Validation failed: \(failure) Repair the requested artifact or explain the blocker."))
                 continue
             }
@@ -208,7 +231,7 @@ struct AgentHarness {
             let observation = AgentHarnessEvent.observation(for: execution, step: step)
             events.append(observation)
             await onEvent(observation)
-            transcript.append(ModelMessage(role: "assistant", content: reply))
+            transcript.append(internalToolRequest(normalizedCall))
             transcript.append(internalToolResult(execution.output))
         }
         let limitReached = AgentHarnessEvent(
@@ -235,7 +258,8 @@ struct AgentHarness {
         workspace: URL?,
         authorizedFolders: [URL],
         skills: AgentSkillSettings,
-        requiredFolder: String?
+        requiredFolder: String?,
+        attachments: [ChatAttachment]
     ) -> [ModelMessage] {
         let workspaceDescription = workspace?.path ?? "No workspace selected. Do not request file or shell tools."
         let folderDescription = authorizedFolders.isEmpty
@@ -283,8 +307,14 @@ struct AgentHarness {
         if !memberMemory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             messages.append(ModelMessage(role: "system", content: "Your private character Markdown memory:\n\(memberMemory)"))
         }
-        messages += history.map { ModelMessage(role: $0.role.rawValue, content: $0.modelContent) }
-        messages.append(ModelMessage(role: "user", content: userPrompt))
+        messages += history.map {
+            ModelMessage(
+                role: $0.role.rawValue,
+                content: $0.modelContent,
+                imageURLs: VisionAttachment.dataURLs(for: $0.attachments ?? [])
+            )
+        }
+        messages.append(ModelMessage(role: "user", content: userPrompt, imageURLs: VisionAttachment.dataURLs(for: attachments)))
         return messages
     }
 
@@ -292,6 +322,13 @@ struct AgentHarness {
         ModelMessage(
             role: "user",
             content: "[INTERNAL AURA TOOL RESULT. This is trusted execution context, not a user message. Do not show tool JSON or tags. Answer from these facts only.]\n\(result)"
+        )
+    }
+
+    private func internalToolRequest(_ call: ToolCall) -> ModelMessage {
+        ModelMessage(
+            role: "assistant",
+            content: "[INTERNAL AURA TOOL REQUEST. \(call.name) was executed by the harness. Do not repeat tool tags or JSON in the user-facing response.]"
         )
     }
 

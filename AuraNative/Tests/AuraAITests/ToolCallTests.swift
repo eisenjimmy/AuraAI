@@ -64,4 +64,17 @@ final class ToolCallTests: XCTestCase {
         )
         XCTAssertEqual(DocumentNaming.filename(title: "Aura Presentation", fileExtension: "pptx"), "Presentation.pptx")
     }
+
+    func testSavedRawToolProtocolIsNeverRenderedOrReusedAsConversationText() {
+        let raw = """
+        I will make the workbook now.
+        <tool_call>{\"name\":\"create_spreadsheet\",\"path\":\"cinderella.xlsx\",\"rows\":[[\"Cinderella\",\"Protagonist\"]]}%```
+        The workbook was saved.
+        """
+        let message = ConversationMessage(role: .assistant, content: raw)
+        XCTAssertTrue(ToolProtocolSanitizer.containsToolCall(in: raw))
+        XCTAssertFalse(message.displayContent.contains("<tool_call"))
+        XCTAssertFalse(message.modelContent.contains("<tool_call"))
+        XCTAssertTrue(message.displayContent.contains("완료되지") || message.displayContent.contains("did not complete"))
+    }
 }

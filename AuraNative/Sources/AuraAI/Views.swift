@@ -382,17 +382,6 @@ private struct ChatView: View {
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
-                Picker("", selection: Binding(
-                    get: { store.conversationMode(for: member) },
-                    set: { store.setConversationMode($0, for: member) }
-                )) {
-                    ForEach(ConversationMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 154)
                 Button { store.memoryMember = member } label: { Image(systemName: "brain.head.profile") }
                     .help(auraText("Character memory", "캐릭터별 기억"))
                     .buttonStyle(.plain)
@@ -420,7 +409,7 @@ private struct ChatView: View {
                                 .id(message.id)
                         }
                         if store.isWorking(for: member) {
-                            WorkingActivityView(member: member, events: store.harnessEvents, agentMode: store.settings.agentModeEnabled || !store.harnessEvents.isEmpty)
+                            WorkingActivityView(member: member, events: store.harnessEvents)
                             .id("working")
                         }
                     }
@@ -494,7 +483,6 @@ private struct ChatView: View {
 private struct WorkingActivityView: View {
     let member: TeamMember
     let events: [AgentHarnessEvent]
-    let agentMode: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -502,7 +490,7 @@ private struct WorkingActivityView: View {
             VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 7) {
                     ProgressView().controlSize(.small)
-                    Text(agentMode ? auraText("Working through the task...", "작업 진행 중...") : auraText("Thinking...", "생각 중..."))
+                    Text(auraText("Working through the task...", "작업 진행 중..."))
                         .foregroundStyle(.secondary)
                 }
                 if let event = events.last {
@@ -706,10 +694,10 @@ private struct MessageBubble: View {
                     .foregroundStyle(.secondary)
                 Group {
                     if message.role == .assistant {
-                        MarkdownMessageView(content: message.content)
+                        MarkdownMessageView(content: message.displayContent)
                             .padding(.top, 1)
                     } else {
-                        Text(message.content)
+                        Text(message.displayContent)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 9)
                             .background(AuraTheme.userBubble, in: RoundedRectangle(cornerRadius: 8))

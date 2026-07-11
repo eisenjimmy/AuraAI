@@ -1,20 +1,6 @@
 import Foundation
 import SwiftUI
 
-enum ConversationMode: String, Codable, CaseIterable, Identifiable {
-    case casual
-    case work
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .casual: return auraText("Casual", "일상")
-        case .work: return auraText("Work", "작업")
-        }
-    }
-}
-
 struct ConversationContextStatus: Equatable {
     static let capacity = 8_192
 

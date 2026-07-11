@@ -214,7 +214,9 @@ final class ArtifactWriterTests: XCTestCase {
 
         let attachment = try AttachmentExtractor.extract(from: url)
         XCTAssertTrue(attachment.isImage)
-        XCTAssertEqual(attachment.extractedText, "[Image attached. No readable text was detected.]")
+        XCTAssertEqual(attachment.kind, "Image")
+        XCTAssertTrue(attachment.extractedText.contains("vision model"))
+        XCTAssertTrue(VisionAttachment.dataURLs(for: [attachment]).first?.hasPrefix("data:image/png;base64,") == true)
     }
 
     private func assertArchive(_ url: URL) throws {

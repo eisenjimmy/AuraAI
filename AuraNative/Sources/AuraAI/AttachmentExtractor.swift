@@ -57,10 +57,10 @@ enum AttachmentExtractor {
         case "pdf":
             result = try extractPDF(url)
         case "png", "jpg", "jpeg", "heic", "tiff", "tif", "bmp", "gif", "webp":
-            guard let image = NSImage(contentsOf: url), let cgImage = image.cgImageForOCR else {
+            guard NSImage(contentsOf: url) != nil else {
                 throw AttachmentExtractionError.unreadable(name)
             }
-            result = ("Image OCR", try recognizeText(in: cgImage), nil)
+            result = ("Image", "[Visual image attached. Analyze it with the configured vision model.]", nil)
         default:
             throw AttachmentExtractionError.unsupported(ext.isEmpty ? "unknown" : ext)
         }

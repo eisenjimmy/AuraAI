@@ -52,17 +52,6 @@ final class AuraStore: ObservableObject {
     func effectiveSkills(for member: TeamMember) -> AgentSkillSettings { skillSettings.limited(to: member) }
     func isWorking(for member: TeamMember) -> Bool { isWorking && activeWorkingMemberID == member.id }
 
-    func conversationMode(for member: TeamMember) -> ConversationMode {
-        settings.conversationModes?[member.id.uuidString] ?? .casual
-    }
-
-    func setConversationMode(_ mode: ConversationMode, for member: TeamMember) {
-        var modes = settings.conversationModes ?? [:]
-        modes[member.id.uuidString] = mode
-        settings.conversationModes = modes
-        saveSettings()
-    }
-
     var globalMemory: String { persistence.globalMemory() }
     var globalMemoryVaultURL: URL { persistence.globalMemoryVault().url }
     func memberMemoryVaultURL(_ member: TeamMember) -> URL { persistence.memberMemoryVault(member.id).url }
@@ -368,8 +357,6 @@ final class AuraStore: ObservableObject {
         // Decide the output type only from what the person typed. `text` also
         // includes attachment contents, which may mention unrelated formats.
         let requestedArtifact = ArtifactIntent.requested(in: displayText)
-        let mode = conversationMode(for: member)
-        let agentMode = mode == .work
         let boundedHistory = ConversationContextWindow.select(from: Array(history))
         contextStatus = boundedHistory.status
 
@@ -377,42 +364,24 @@ final class AuraStore: ObservableObject {
             do {
                 let response: String
                 let responseAttachments: [ChatAttachment]
-                if agentMode {
-                    let result = try await AgentHarness().run(
-                        userPrompt: text,
-                        member: member,
-                        history: boundedHistory.messages,
-                        configuration: config,
-                        globalMemory: globalMemory,
-                        memberMemory: privateMemory,
-                        workspace: workspace,
-                        authorizedFolders: authorizedFolders,
-                        skills: skills,
-                        requestedArtifact: requestedArtifact,
-                        requestFolder: { name in await self.requestFolderAccess(named: name) },
-                        approval: { approval in await self.requestApproval(approval) },
-                        onEvent: { event in self.harnessEvents.append(event) }
-                    )
-                    response = result.response
-                    responseAttachments = result.attachments
-                } else {
-                    let memoryInstruction = auraText(
-                        "Aura has durable Markdown memory for this friend. Treat the recalled notes as known context. If the user asks you to remember a fact, acknowledge that it is saved; never claim that you are inherently stateless.",
-                        "Aura는 이 친구별로 지속되는 Markdown 기억을 저장합니다. 떠올린 메모를 알고 있는 맥락으로 사용하세요. 사용자가 기억해 달라고 하면 저장되었다고 짧게 확인하고, 기억이 전혀 없거나 본질적으로 무상태라고 말하지 마세요."
-                    )
-                    let casualInstruction = auraText(
-                        "This conversation is in Casual mode. Do not offer or attempt file, folder, shell, computer, or document-creation tools. If the person asks for a file or other work, ask them to switch this chat to Work.",
-                        "이 대화는 일상 모드입니다. 파일, 폴더, 명령어, Mac 제어, 문서 생성 도구를 제안하거나 시도하지 마세요. 파일 작업 등이 필요하면 이 대화를 작업 모드로 전환해 달라고 안내하세요."
-                    )
-                    let system = [AuraEdition.current.responseLanguageInstruction, memoryInstruction, member.systemPrompt, globalMemory.isEmpty ? nil : "Shared user memory:\n\(globalMemory)", privateMemory.isEmpty ? nil : privateMemory]
-                        .compactMap { $0 }
-                        .joined(separator: "\n\n")
-                    let modelMessages = [ModelMessage(role: "system", content: system + "\n\n" + casualInstruction)]
-                        + boundedHistory.messages.map { ModelMessage(role: $0.role.rawValue, content: $0.modelContent) }
-                        + [ModelMessage(role: "user", content: text)]
-                    response = try await OpenAICompatibleClient().complete(messages: modelMessages, configuration: config)
-                    responseAttachments = []
-                }
+                let result = try await AgentHarness().run(
+                    userPrompt: text,
+                    member: member,
+                    history: boundedHistory.messages,
+                    configuration: config,
+                    globalMemory: globalMemory,
+                    memberMemory: privateMemory,
+                    workspace: workspace,
+                    authorizedFolders: authorizedFolders,
+                    skills: skills,
+                    requestedArtifact: requestedArtifact,
+                    attachments: attachments,
+                    requestFolder: { name in await self.requestFolderAccess(named: name) },
+                    approval: { approval in await self.requestApproval(approval) },
+                    onEvent: { event in self.harnessEvents.append(event) }
+                )
+                response = result.response
+                responseAttachments = result.attachments
                 let restored = privacyReview.map { privacyFilter.restore(response, review: $0) } ?? response
                 messages.append(ConversationMessage(role: .assistant, content: restored, attachments: responseAttachments))
                 persistence.saveConversation(messages, memberID: member.id)
