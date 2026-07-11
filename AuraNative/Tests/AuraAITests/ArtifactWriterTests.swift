@@ -112,6 +112,38 @@ final class ArtifactWriterTests: XCTestCase {
         XCTAssertTrue(slideXML.contains("Publish notes"))
     }
 
+    func testPresentationValidatorRequiresConversationSubject() throws {
+        let grounded = folder.appendingPathComponent("cinderella-presentation.pptx")
+        try ArtifactWriter.presentation(
+            title: "Cinderella Characters",
+            subtitle: "Prepared from the conversation context",
+            slides: [PresentationSlide(title: "Cinderella", body: "Character overview", bullets: ["Cinderella", "Fairy Godmother"])],
+            to: grounded
+        )
+        let groundedAttachment = ChatAttachment(
+            fileName: grounded.lastPathComponent,
+            storedPath: grounded.path,
+            kind: "PowerPoint presentation",
+            extractedText: ""
+        )
+        XCTAssertNil(ArtifactValidator.validate([groundedAttachment], expected: .presentation, source: "Cinderella source material"))
+
+        let generic = folder.appendingPathComponent("generic-presentation.pptx")
+        try ArtifactWriter.presentation(
+            title: "Presentation",
+            subtitle: "A generic outline",
+            slides: [PresentationSlide(title: "Overview", body: "How to make a presentation", bullets: ["Outline", "Review"])],
+            to: generic
+        )
+        let genericAttachment = ChatAttachment(
+            fileName: generic.lastPathComponent,
+            storedPath: generic.path,
+            kind: "PowerPoint presentation",
+            extractedText: ""
+        )
+        XCTAssertNotNil(ArtifactValidator.validate([genericAttachment], expected: .presentation, source: "Cinderella source material"))
+    }
+
     func testOfficeArtifactsConvertWithHeadlessOffice() throws {
         guard let soffice = try sofficeURL() else { throw XCTSkip("Headless Office is not installed.") }
         let docx = folder.appendingPathComponent("office-word.docx")

@@ -175,6 +175,8 @@ struct AuraSettings: Codable, Equatable {
     /// Read-only folders the user explicitly selected for the agent harness.
     var authorizedFolderPaths: [String] = []
     var agentModeEnabled = false
+    /// Per-friend conversation modes. Optional for migration from earlier settings.
+    var conversationModes: [String: ConversationMode]?
     /// Optional for backward-compatible decoding of earlier settings files.
     var defaultRosterRevision: Int?
     /// Optional for backward-compatible decoding of earlier settings files.

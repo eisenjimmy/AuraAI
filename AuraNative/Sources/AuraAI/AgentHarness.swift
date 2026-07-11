@@ -29,6 +29,8 @@ struct AgentHarness {
         var loopGuard = AgentLoopGuard()
         var readableFolders = authorizedFolders.map(\.standardizedFileURL)
         let requestedFolder = AgentFolderIntent.explicitFolder(in: userPrompt)
+        let artifactSource = history.map(\.modelContent).joined(separator: "\n\n") + "\n\n" + userPrompt
+        let artifactTitle = requestedArtifact.map { DocumentNaming.suggestedTitle(for: $0, source: artifactSource) }
         var initialFolderResult: String?
 
         let received = AgentHarnessEvent(
@@ -101,10 +103,21 @@ struct AgentHarness {
                     await onEvent(fallback)
                     if let execution = try await fallbackExecution(
                         for: requestedArtifact,
-                        prompt: userPrompt,
+                        prompt: artifactSource,
                         workspace: workspace,
                         approval: approval
                     ) {
+                        if let failure = ArtifactValidator.validate(execution.attachments, expected: requestedArtifact, source: artifactSource) {
+                            let invalid = AgentHarnessEvent(
+                                kind: .failed,
+                                step: step,
+                                title: auraText("Generated file did not validate", "생성된 파일 검증에 실패했습니다"),
+                                detail: failure
+                            )
+                            events.append(invalid)
+                            await onEvent(invalid)
+                            return AgentRunResult(response: failure, attachments: [], events: events)
+                        }
                         let observation = AgentHarnessEvent.observation(for: execution, step: step)
                         events.append(observation)
                         await onEvent(observation)
@@ -157,16 +170,17 @@ struct AgentHarness {
                 ))
                 continue
             }
+            let normalizedCall = requestedArtifact.map { $0.normalizing(call, title: artifactTitle ?? $0.defaultTitle) } ?? call
             let requested = AgentHarnessEvent(
                 kind: .toolRequested,
                 step: step,
-                title: auraText("Requested \(call.name)", "\(call.name) 도구 요청"),
-                detail: call.safeSummary
+                title: auraText("Requested \(normalizedCall.name)", "\(normalizedCall.name) 도구 요청"),
+                detail: normalizedCall.safeSummary
             )
             events.append(requested)
             await onEvent(requested)
             let execution = try await AgentToolExecutor.execute(
-                call,
+                normalizedCall,
                 workspace: workspace,
                 authorizedFolders: readableFolders,
                 skills: skills,
@@ -175,6 +189,20 @@ struct AgentHarness {
             )
             if let grantedFolder = execution.grantedFolder, !readableFolders.contains(grantedFolder) {
                 readableFolders.append(grantedFolder)
+            }
+            if let requestedArtifact, !execution.attachments.isEmpty,
+               let failure = ArtifactValidator.validate(execution.attachments, expected: requestedArtifact, source: artifactSource) {
+                let invalid = AgentHarnessEvent(
+                    kind: .failed,
+                    step: step,
+                    title: auraText("Generated file did not validate", "생성된 파일 검증에 실패했습니다"),
+                    detail: failure
+                )
+                events.append(invalid)
+                await onEvent(invalid)
+                transcript.append(ModelMessage(role: "assistant", content: reply))
+                transcript.append(internalToolResult("Validation failed: \(failure) Repair the requested artifact or explain the blocker."))
+                continue
             }
             generatedAttachments += execution.attachments
             let observation = AgentHarnessEvent.observation(for: execution, step: step)
@@ -245,7 +273,7 @@ struct AgentHarness {
         list_files {"path":"."}; read_file {"path":"README.md"}; request_folder_access {"folder":"Downloads"}; write_file {"path":"notes.txt","content":"..."}.
         \(documentToolInstructions)
         run_shell {"command":"git status --short"}; computer {"action":"open_app|open_url|click|type|key","value":"...","x":0,"y":0}.
-        Use an enabled dedicated document tool when the user asks for Markdown, HTML, Excel, Word, or PowerPoint. The document path is optional; Aura uses a safe filename based on the title when it is omitted. Excel output must be a real .xlsx workbook, never CSV renamed to .xlsx.
+        Use an enabled dedicated document tool when the user asks for Markdown, HTML, Excel, Word, or PowerPoint. Derive the document title and filename from the supplied conversation or attachment content. Never use Aura as a generic file title. The document path is optional; Aura uses a safe filename based on the title when it is omitted. Excel output must be a real .xlsx workbook, never CSV renamed to .xlsx.
         Tool results are internal. Never show <tool_result>, tool JSON, or raw arrays to the user. Once work is complete, give a concise factual answer that names the exact folder inspected. Do not use fake excitement or claim success when access was declined. Follow the response-language instruction even if tool output is in another language.
         """
         var messages = [ModelMessage(role: "system", content: instructions)]
@@ -255,7 +283,7 @@ struct AgentHarness {
         if !memberMemory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             messages.append(ModelMessage(role: "system", content: "Your private character Markdown memory:\n\(memberMemory)"))
         }
-        messages += history.suffix(12).map { ModelMessage(role: $0.role.rawValue, content: $0.modelContent) }
+        messages += history.map { ModelMessage(role: $0.role.rawValue, content: $0.modelContent) }
         messages.append(ModelMessage(role: "user", content: userPrompt))
         return messages
     }
@@ -364,6 +392,26 @@ enum ArtifactIntent: Equatable {
         }
     }
 
+    var fileExtension: String {
+        switch self {
+        case .spreadsheet: return "xlsx"
+        case .presentation: return "pptx"
+        case .word: return "docx"
+        case .markdown: return "md"
+        case .html: return "html"
+        }
+    }
+
+    var defaultTitle: String {
+        switch self {
+        case .spreadsheet: return auraText("Summary", "요약")
+        case .presentation: return auraText("Presentation", "프레젠테이션")
+        case .word: return auraText("Document", "문서")
+        case .markdown: return auraText("Notes", "메모")
+        case .html: return auraText("Report", "보고서")
+        }
+    }
+
     var fallbackTitle: String {
         switch self {
         case .spreadsheet: return auraText("Creating the spreadsheet", "엑셀 파일을 만드는 중")
@@ -382,6 +430,20 @@ enum ArtifactIntent: Equatable {
 
     func conflicts(with toolName: String) -> Bool {
         toolName.hasPrefix("create_") && toolName != skill.toolName
+    }
+
+    func normalizing(_ call: ToolCall, title: String) -> ToolCall {
+        guard call.name == skill.toolName else { return call }
+        var arguments = call.arguments
+        let requestedTitle = arguments["title"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if requestedTitle.isEmpty || requestedTitle.localizedCaseInsensitiveContains("aura") {
+            arguments["title"] = .string(title)
+        }
+        let requestedPath = arguments["path"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if requestedPath.isEmpty || requestedPath.localizedCaseInsensitiveContains("aura") {
+            arguments["path"] = .string(DocumentNaming.filename(title: title, fileExtension: fileExtension))
+        }
+        return ToolCall(name: call.name, arguments: arguments)
     }
 
     static func requested(in text: String) -> ArtifactIntent? {
@@ -588,7 +650,7 @@ private enum AgentToolExecutor {
             return ToolExecution(output: "Created Markdown document at \(path).", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "Markdown document")])
         case "create_html_document":
             guard skills.isEnabled(.html) else { return disabledSkill("HTML") }
-            let title = AgentArtifactPath.title(from: call.arguments, fallback: auraText("Aura report", "Aura 보고서"))
+            let title = AgentArtifactPath.title(from: call.arguments, fallback: ArtifactIntent.html.defaultTitle)
             let path = AgentArtifactPath.path(from: call.arguments, title: title, fileExtension: "html")
             let summary = call.arguments["summary"]?.stringValue ?? ""
             let body = try required("body_html", call.arguments)
@@ -603,7 +665,7 @@ private enum AgentToolExecutor {
             return ToolExecution(output: "Created self-contained HTML document at \(path).", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "HTML document")])
         case "create_spreadsheet":
             guard skills.isEnabled(.spreadsheet) else { return disabledSkill("Excel") }
-            let title = AgentArtifactPath.title(from: call.arguments, fallback: auraText("Aura summary", "Aura 요약"))
+            let title = AgentArtifactPath.title(from: call.arguments, fallback: ArtifactIntent.spreadsheet.defaultTitle)
             let path = AgentArtifactPath.path(from: call.arguments, title: title, fileExtension: "xlsx")
             let sheet = call.arguments["sheet"]?.stringValue ?? "Summary"
             let headers = (optionalArray(["headers", "columns", "fields"], call.arguments) ?? [])
@@ -622,7 +684,7 @@ private enum AgentToolExecutor {
             return ToolExecution(output: "Created Excel workbook at \(path) with \(rows.count) data rows.", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "Excel workbook")])
         case "create_word_document":
             guard skills.isEnabled(.word) else { return disabledSkill("Word") }
-            let title = AgentArtifactPath.title(from: call.arguments, fallback: auraText("Aura document", "Aura 문서"))
+            let title = AgentArtifactPath.title(from: call.arguments, fallback: ArtifactIntent.word.defaultTitle)
             let path = AgentArtifactPath.path(from: call.arguments, title: title, fileExtension: "docx")
             let content = try required("content", call.arguments)
             let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
@@ -636,7 +698,7 @@ private enum AgentToolExecutor {
             return ToolExecution(output: "Created Word document at \(path).", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "Word document")])
         case "create_presentation":
             guard skills.isEnabled(.presentation) else { return disabledSkill("PowerPoint") }
-            let title = AgentArtifactPath.title(from: call.arguments, fallback: auraText("Aura presentation", "Aura 프레젠테이션"))
+            let title = AgentArtifactPath.title(from: call.arguments, fallback: ArtifactIntent.presentation.defaultTitle)
             let path = AgentArtifactPath.path(from: call.arguments, title: title, fileExtension: "pptx")
             let subtitle = call.arguments["subtitle"]?.stringValue ?? ""
             let slides = try presentationSlides(from: requiredArray("slides", call.arguments))
@@ -706,13 +768,9 @@ private enum AgentToolExecutor {
         workspace: URL?,
         approval: @escaping @MainActor (AgentApproval) async -> Bool
     ) async throws -> ToolExecution {
-        let lines = prompt
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && !$0.hasPrefix("<") && !$0.hasPrefix("The following attachments") }
-            .prefix(500)
+        let lines = DocumentNaming.meaningfulLines(in: prompt, limit: 500)
         let isCharacterList = prompt.lowercased().contains("character") || prompt.contains("등장인물")
-        let title = auraText(isCharacterList ? "Character list" : "Aura spreadsheet", isCharacterList ? "등장인물 목록" : "Aura 요약")
+        let title = DocumentNaming.suggestedTitle(for: .spreadsheet, source: prompt)
         let path = AgentArtifactPath.path(from: [:], title: title, fileExtension: "xlsx")
         let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
         let headers = [auraText(isCharacterList ? "Character or source text" : "Source text", isCharacterList ? "등장인물 또는 원문" : "원문")]
@@ -736,21 +794,17 @@ private enum AgentToolExecutor {
         workspace: URL?,
         approval: @escaping @MainActor (AgentApproval) async -> Bool
     ) async throws -> ToolExecution {
-        let sourceLines = prompt
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && !$0.hasPrefix("<") && !$0.hasPrefix("The following attachments") && !$0.hasPrefix("Context note:") }
-            .prefix(36)
-        let title = auraText("Aura presentation", "Aura 프레젠테이션")
+        let sourceLines = DocumentNaming.meaningfulLines(in: prompt, limit: 60)
+        let title = DocumentNaming.suggestedTitle(for: .presentation, source: prompt)
         let path = AgentArtifactPath.path(from: [:], title: title, fileExtension: "pptx")
         let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
-        let groups = stride(from: 0, to: sourceLines.count, by: 5).map { start in
-            Array(sourceLines.dropFirst(start).prefix(5))
+        let groups = stride(from: 0, to: sourceLines.count, by: 4).map { start in
+            Array(sourceLines.dropFirst(start).prefix(4))
         }
         let slides = groups.prefix(6).enumerated().map { index, group in
             PresentationSlide(
                 title: group.first.map { String($0.prefix(90)) } ?? auraText("Overview", "개요"),
-                body: index == 0 ? auraText("Prepared from the supplied source material.", "제공된 원문을 바탕으로 정리했습니다.") : "",
+                body: index == 0 ? auraText("Source overview", "원문 개요") : "",
                 bullets: Array(group.dropFirst()).map { String($0.prefix(180)) }
             )
         }
@@ -765,7 +819,7 @@ private enum AgentToolExecutor {
         guard allowed else { return ToolExecution(output: "User declined the PowerPoint write.", grantedFolder: nil) }
         try ArtifactWriter.presentation(
             title: title,
-            subtitle: auraText("Prepared by Aura", "Aura가 준비했습니다"),
+            subtitle: auraText("Prepared from the conversation context", "대화 맥락을 바탕으로 정리") ,
             slides: contentSlides,
             to: file
         )
@@ -878,21 +932,15 @@ enum AgentPathResolver {
 enum AgentArtifactPath {
     static func title(from values: [String: JSONValue], fallback: String) -> String {
         let requested = values["title"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return requested.isEmpty ? fallback : requested
+        return requested.isEmpty || requested.localizedCaseInsensitiveContains("aura") ? fallback : requested
     }
 
     static func path(from values: [String: JSONValue], title: String?, fileExtension: String) -> String {
         let requested = values["path"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard requested.isEmpty else {
+        guard requested.isEmpty || requested.localizedCaseInsensitiveContains("aura") else {
             return URL(fileURLWithPath: requested).pathExtension.isEmpty ? "\(requested).\(fileExtension)" : requested
         }
-
-        let source = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
-        var stem = source.unicodeScalars.map { allowed.contains($0) ? String($0) : "-" }.joined()
-        while stem.contains("--") { stem = stem.replacingOccurrences(of: "--", with: "-") }
-        stem = stem.trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
-        return "\(stem.isEmpty ? "aura-document" : stem).\(fileExtension)"
+        return DocumentNaming.filename(title: title ?? "Document", fileExtension: fileExtension)
     }
 }
 

@@ -1,5 +1,7 @@
 import AppKit
+import QuickLookUI
 import SwiftUI
+import WebKit
 
 struct OnboardingView: View {
     @EnvironmentObject private var store: AuraStore
@@ -44,7 +46,7 @@ struct OnboardingView: View {
                 ForEach(Array(labels.enumerated()), id: \.offset) { index, label in
                     HStack(spacing: 9) {
                         Image(systemName: index < step ? "checkmark.circle.fill" : index == step ? "circle.inset.filled" : "circle")
-                            .foregroundStyle(index <= step ? Color.accentColor : Color.secondary.opacity(0.55))
+                            .foregroundStyle(index <= step ? AuraTheme.accent : Color.secondary.opacity(0.55))
                         Text(label).foregroundStyle(index == step ? Color.primary : Color.secondary)
                     }
                     .font(.callout)
@@ -187,7 +189,16 @@ struct AuraWorkspaceView: View {
             FriendsSidebar(isShowingAddMember: $isShowingAddMember)
         } detail: {
             if let member = store.selectedMember {
-                ChatView(member: member)
+                if let attachment = store.previewAttachment {
+                    HSplitView {
+                        ChatView(member: member)
+                            .frame(minWidth: 520, idealWidth: 860)
+                        ArtifactPreviewPane(attachment: attachment)
+                            .frame(minWidth: 340, idealWidth: 520)
+                    }
+                } else {
+                    ChatView(member: member)
+                }
             } else {
                 ContentUnavailableView(auraText("Choose a teammate", "친구를 선택하세요"), systemImage: "person.2")
             }
@@ -220,7 +231,7 @@ private struct FriendsSidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: "sparkles").foregroundStyle(Color.accentColor)
+                Image(systemName: "sparkles").foregroundStyle(AuraTheme.accent)
                 Text("Aura").font(.headline)
                 Spacer()
                 Button { isShowingAddMember = true } label: { Image(systemName: "person.badge.plus") }
@@ -238,7 +249,7 @@ private struct FriendsSidebar: View {
             ScrollView {
                 LazyVStack(spacing: 3) {
                     ForEach(store.members) { member in
-                        FriendRow(member: member, isSelected: member.id == store.selectedMemberID, isWorking: store.isWorking && member.id == store.selectedMemberID)
+                        FriendRow(member: member, isSelected: member.id == store.selectedMemberID, isWorking: store.isWorking(for: member))
                             .onTapGesture { store.select(member) }
                             .contextMenu {
                                 Button(auraText("Edit friend", "친구 편집")) { store.editingMember = member }
@@ -308,7 +319,7 @@ private struct FriendRow: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .background(isSelected ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 7))
+        .background(isSelected ? AuraTheme.selection : .clear, in: RoundedRectangle(cornerRadius: 7))
     }
 }
 
@@ -366,8 +377,22 @@ private struct ChatView: View {
                     Text(member.role.title)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Text(store.contextStatus.detail)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
                 Spacer()
+                Picker("", selection: Binding(
+                    get: { store.conversationMode(for: member) },
+                    set: { store.setConversationMode($0, for: member) }
+                )) {
+                    ForEach(ConversationMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 154)
                 Button { store.memoryMember = member } label: { Image(systemName: "brain.head.profile") }
                     .help(auraText("Character memory", "캐릭터별 기억"))
                     .buttonStyle(.plain)
@@ -394,7 +419,7 @@ private struct ChatView: View {
                             MessageBubble(message: message, member: member)
                                 .id(message.id)
                         }
-                        if store.isWorking {
+                        if store.isWorking(for: member) {
                             WorkingActivityView(member: member, events: store.harnessEvents, agentMode: store.settings.agentModeEnabled || !store.harnessEvents.isEmpty)
                             .id("working")
                         }
@@ -408,10 +433,10 @@ private struct ChatView: View {
                     if let message = store.messages.last { proxy.scrollTo(message.id, anchor: .bottom) }
                 }
                 .onChange(of: store.isWorking) { _, working in
-                    if working { proxy.scrollTo("working", anchor: .bottom) }
+                    if working, store.isWorking(for: member) { proxy.scrollTo("working", anchor: .bottom) }
                 }
                 .onChange(of: store.harnessEvents.count) { _, _ in
-                    if store.isWorking { proxy.scrollTo("working", anchor: .bottom) }
+                    if store.isWorking(for: member) { proxy.scrollTo("working", anchor: .bottom) }
                 }
             }
 
@@ -433,7 +458,7 @@ private struct ChatView: View {
                             .frame(width: 28, height: 28)
                     }
                     .buttonStyle(.plain)
-                    .disabled(store.isWorking || store.isExtractingAttachments)
+                    .disabled(store.isWorking(for: member) || store.isExtractingAttachments)
                     .help(auraText("Attach image, PDF, Word, Excel, or text", "이미지, PDF, Word, Excel 또는 텍스트 첨부"))
 
                     TextField(auraText("Message \(member.name)", "\(member.name)에게 메시지"), text: $store.draft, axis: .vertical)
@@ -449,7 +474,7 @@ private struct ChatView: View {
                             Image(systemName: "arrow.up.circle.fill").font(.title2)
                         }
                         .buttonStyle(.plain)
-                        .disabled((store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && store.pendingAttachments.isEmpty) || store.isWorking)
+                        .disabled((store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && store.pendingAttachments.isEmpty) || store.isWorking(for: member))
                         .help(auraText("Send", "보내기"))
                     }
                 }
@@ -496,15 +521,16 @@ private struct WorkingActivityView: View {
 }
 
 private struct AttachmentChip: View {
+    @EnvironmentObject private var store: AuraStore
     var attachment: ChatAttachment
     var remove: (() -> Void)?
 
     var body: some View {
         Group {
-            if remove == nil, let url = existingFileURL {
-                Button { NSWorkspace.shared.open(url) } label: { chipContent }
+            if remove == nil, existingFileURL != nil {
+                Button { store.previewAttachment = attachment } label: { chipContent }
                     .buttonStyle(.plain)
-                    .help(auraText("Open file", "파일 열기"))
+                    .help(auraText("Preview file", "파일 미리보기"))
             } else {
                 chipContent
             }
@@ -538,6 +564,90 @@ private struct AttachmentChip: View {
     }
 }
 
+private struct ArtifactPreviewPane: View {
+    @EnvironmentObject private var store: AuraStore
+    let attachment: ChatAttachment
+
+    private var fileURL: URL { URL(fileURLWithPath: attachment.storedPath) }
+    private var isHTML: Bool { ["html", "htm"].contains(fileURL.pathExtension.lowercased()) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Image(systemName: previewSymbol)
+                    .foregroundStyle(AuraTheme.accent)
+                Text(attachment.fileName)
+                    .font(.headline)
+                    .lineLimit(1)
+                Spacer()
+                Button { store.export(attachment) } label: { Image(systemName: "square.and.arrow.down") }
+                    .buttonStyle(.plain)
+                    .help(auraText("Export a copy", "사본 내보내기"))
+                ShareLink(item: fileURL) { Image(systemName: "square.and.arrow.up") }
+                    .buttonStyle(.plain)
+                    .help(auraText("Share, including Messages", "공유하기 및 메시지"))
+                Button { store.previewAttachment = nil } label: { Image(systemName: "xmark") }
+                    .buttonStyle(.plain)
+                    .help(auraText("Close preview", "미리보기 닫기"))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(.bar)
+
+            Group {
+                if isHTML {
+                    HTMLFilePreview(url: fileURL)
+                } else {
+                    QuickLookFilePreview(url: fileURL)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    private var previewSymbol: String {
+        switch fileURL.pathExtension.lowercased() {
+        case "xlsx", "csv": return "tablecells"
+        case "pptx": return "rectangle.on.rectangle.angled"
+        case "docx", "rtf": return "doc.richtext"
+        case "html", "htm": return "chevron.left.forwardslash.chevron.right"
+        default: return "doc"
+        }
+    }
+}
+
+private struct QuickLookFilePreview: NSViewRepresentable {
+    let url: URL
+
+    func makeNSView(context: Context) -> QLPreviewView {
+        let view = QLPreviewView(frame: .zero, style: .normal)!
+        view.previewItem = url as NSURL
+        view.autostarts = true
+        return view
+    }
+
+    func updateNSView(_ view: QLPreviewView, context: Context) {
+        view.previewItem = url as NSURL
+    }
+}
+
+private struct HTMLFilePreview: NSViewRepresentable {
+    let url: URL
+
+    func makeNSView(context: Context) -> WKWebView {
+        let view = WKWebView()
+        view.setValue(false, forKey: "drawsBackground")
+        view.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        return view
+    }
+
+    func updateNSView(_ view: WKWebView, context: Context) {
+        guard view.url != url else { return }
+        view.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+    }
+}
+
 private struct MessageBubble: View {
     var message: ConversationMessage
     var member: TeamMember
@@ -553,14 +663,15 @@ private struct MessageBubble: View {
                 Group {
                     if message.role == .assistant {
                         MarkdownMessageView(content: message.content)
+                            .padding(.top, 1)
                     } else {
                         Text(message.content)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .background(AuraTheme.userBubble, in: RoundedRectangle(cornerRadius: 8))
                     }
                 }
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .background(message.role == .user ? Color.accentColor.opacity(0.15) : Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+                .textSelection(.enabled)
                 if let attachments = message.attachments, !attachments.isEmpty {
                     HStack(spacing: 6) {
                         ForEach(attachments) { AttachmentChip(attachment: $0, remove: nil) }
@@ -849,12 +960,6 @@ struct SettingsView: View {
 
     private var harnessTab: some View {
         Form {
-            Section(auraText("Work tools", "작업 도구")) {
-                Toggle(auraText("Allow friends to use tools", "친구의 도구 사용 허용"), isOn: $store.settings.agentModeEnabled)
-                Text(auraText("When enabled, friends can inspect approved folders and use the globally enabled skills. Every write or command still asks for approval.", "켜면 친구가 허용된 폴더를 확인하고 전역으로 켠 기술을 사용할 수 있습니다. 파일 쓰기와 명령 실행은 매번 승인을 요청합니다."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
             HStack {
                 Text(store.settings.workspacePath.isEmpty ? auraText("No write folder selected", "저장 폴더가 선택되지 않았습니다") : store.settings.workspacePath)
                     .lineLimit(1)
@@ -897,7 +1002,7 @@ struct SettingsView: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: skill.symbol)
                             .frame(width: 22)
-                            .foregroundStyle(Color.accentColor)
+                            .foregroundStyle(AuraTheme.accent)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(skill.title).font(.headline)
                             Text(skill.summary)
@@ -976,7 +1081,7 @@ private struct FriendEditor: View {
                                         .overlay(alignment: .bottomTrailing) {
                                             if draft.avatarPath == nil && draft.avatarAsset == asset {
                                                 Image(systemName: "checkmark.circle.fill")
-                                                    .foregroundStyle(.white, Color.accentColor)
+                                                    .foregroundStyle(.white, AuraTheme.accent)
                                                     .background(Circle().fill(Color(nsColor: .windowBackgroundColor)))
                                             }
                                         }

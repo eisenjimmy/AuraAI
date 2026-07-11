@@ -16,6 +16,7 @@ struct AuraAIApp: App {
             .environmentObject(store)
             .frame(minWidth: 940, minHeight: 640)
             .preferredColorScheme(.dark)
+            .tint(AuraTheme.accent)
         }
         .windowStyle(.hiddenTitleBar)
 

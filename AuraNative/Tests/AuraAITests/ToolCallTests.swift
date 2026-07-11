@@ -35,7 +35,7 @@ final class ToolCallTests: XCTestCase {
         let title = AgentArtifactPath.title(from: values, fallback: "Aura summary")
         let path = AgentArtifactPath.path(from: values, title: title, fileExtension: "xlsx")
         XCTAssertEqual(title, "Aura summary")
-        XCTAssertEqual(path, "Aura-summary.xlsx")
+        XCTAssertEqual(path, "summary.xlsx")
     }
 
     func testRecognizesKoreanSpreadsheetIntent() {
@@ -55,5 +55,13 @@ final class ToolCallTests: XCTestCase {
         )
         XCTAssertTrue(ArtifactIntent.presentation.conflicts(with: "create_spreadsheet"))
         XCTAssertFalse(ArtifactIntent.presentation.conflicts(with: "create_presentation"))
+    }
+
+    func testDocumentTitleUsesPriorSourceContext() {
+        XCTAssertEqual(
+            DocumentNaming.suggestedTitle(for: .presentation, source: "Cinderella is the protagonist of this tale.\nThe stepsisters are antagonists."),
+            "Cinderella Presentation"
+        )
+        XCTAssertEqual(DocumentNaming.filename(title: "Aura Presentation", fileExtension: "pptx"), "Presentation.pptx")
     }
 }
