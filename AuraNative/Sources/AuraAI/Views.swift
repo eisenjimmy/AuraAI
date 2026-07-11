@@ -526,14 +526,14 @@ private struct AttachmentChip: View {
     var remove: (() -> Void)?
 
     var body: some View {
-        Group {
-            if remove == nil, existingFileURL != nil {
-                Button { store.previewAttachment = attachment } label: { chipContent }
-                    .buttonStyle(.plain)
-                    .help(auraText("Preview file", "파일 미리보기"))
-            } else {
-                chipContent
-            }
+        if attachment.isImage, let url = existingFileURL {
+            ImageAttachmentPreview(attachment: attachment, url: url, remove: remove)
+        } else if remove == nil, existingFileURL != nil {
+            Button { store.previewAttachment = attachment } label: { chipContent }
+                .buttonStyle(.plain)
+                .help(auraText("Preview file", "파일 미리보기"))
+        } else {
+            chipContent
         }
     }
 
@@ -561,6 +561,50 @@ private struct AttachmentChip: View {
         .padding(.vertical, 6)
         .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 6))
         .frame(maxWidth: 260)
+    }
+}
+
+private struct ImageAttachmentPreview: View {
+    @EnvironmentObject private var store: AuraStore
+    let attachment: ChatAttachment
+    let url: URL
+    var remove: (() -> Void)?
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            image
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .contentShape(RoundedRectangle(cornerRadius: 8))
+                .onTapGesture {
+                    guard remove == nil else { return }
+                    store.previewAttachment = attachment
+                }
+                .help(remove == nil ? auraText("Preview image", "이미지 미리보기") : attachment.fileName)
+
+            if let remove {
+                Button(action: remove) { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white, .black.opacity(0.55))
+                    .padding(7)
+                    .help(auraText("Remove attachment", "첨부 삭제"))
+            }
+        }
+        .accessibilityLabel(auraText("Image attachment: \(attachment.fileName)", "이미지 첨부: \(attachment.fileName)"))
+    }
+
+    @ViewBuilder
+    private var image: some View {
+        if let source = NSImage(contentsOf: url) {
+            Image(nsImage: source)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: 340, maxHeight: 280, alignment: .leading)
+        } else {
+            Label(attachment.fileName, systemImage: "photo")
+                .font(.caption)
+                .padding(12)
+                .background(.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        }
     }
 }
 

@@ -68,15 +68,16 @@ enum AttachmentExtractor {
         let truncated = result.text.count > maximumCharacters
         let text = String(result.text.prefix(maximumCharacters))
         let warning = truncated ? "Only the first \(maximumCharacters.formatted()) characters were included." : result.warning
-        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let isImage = ["png", "jpg", "jpeg", "heic", "tiff", "tif", "bmp", "gif", "webp"].contains(ext)
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isImage else {
             throw AttachmentExtractionError.unreadable(name)
         }
         return ChatAttachment(
             fileName: name,
             storedPath: url.path,
             kind: result.kind,
-            extractedText: text,
-            warning: warning
+            extractedText: text.isEmpty ? "[Image attached. No readable text was detected.]" : text,
+            warning: text.isEmpty ? auraText("No readable text was detected in this image.", "이 이미지에서는 읽을 수 있는 텍스트를 찾지 못했습니다.") : warning
         )
     }
 

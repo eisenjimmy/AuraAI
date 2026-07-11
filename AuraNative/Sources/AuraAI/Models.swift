@@ -507,6 +507,11 @@ struct ChatAttachment: Identifiable, Codable, Equatable, Sendable {
     var warning: String?
 
     var contextText: String { extractedText }
+
+    var isImage: Bool {
+        let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "heic", "tiff", "tif", "bmp", "gif", "webp"]
+        return imageExtensions.contains(URL(fileURLWithPath: storedPath).pathExtension.lowercased()) || kind.localizedCaseInsensitiveContains("image")
+    }
 }
 
 enum AttachmentContext {

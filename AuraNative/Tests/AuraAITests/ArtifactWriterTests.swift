@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import AuraAI
 
@@ -198,6 +199,22 @@ final class ArtifactWriterTests: XCTestCase {
         try handle.truncate(atOffset: UInt64(AttachmentExtractor.maximumFileBytes + 1))
         try handle.close()
         XCTAssertThrowsError(try AttachmentExtractor.validateFileSize(url))
+    }
+
+    func testImageWithoutReadableTextRemainsAttachable() throws {
+        let image = NSImage(size: NSSize(width: 24, height: 24))
+        image.lockFocus()
+        NSColor.white.setFill()
+        NSBezierPath(rect: NSRect(x: 0, y: 0, width: 24, height: 24)).fill()
+        image.unlockFocus()
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)))
+        let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        let url = folder.appendingPathComponent("blank-image.png")
+        try png.write(to: url)
+
+        let attachment = try AttachmentExtractor.extract(from: url)
+        XCTAssertTrue(attachment.isImage)
+        XCTAssertEqual(attachment.extractedText, "[Image attached. No readable text was detected.]")
     }
 
     private func assertArchive(_ url: URL) throws {
