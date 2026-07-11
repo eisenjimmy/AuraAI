@@ -2,11 +2,12 @@
 
 # 아우라 AI
 
-**개성 있는 AI 친구, 기억, 이미지 채팅, 로컬 LLM을 갖춘 프라이빗 데스크톱 앱입니다.**
+**개성, 기억, 이미지 채팅, 로컬 LLM, 네이티브 macOS 클라이언트를 갖춘 프라이빗 AI 팀입니다.**
 
 **언어:** [English](README.md) · 한국어
 
 [![Electron](https://img.shields.io/badge/Electron-33-2b2e3a?logo=electron)](https://www.electronjs.org/)
+[![SwiftUI](https://img.shields.io/badge/SwiftUI-native%20macOS-f05138?logo=swift)](AuraNative/)
 [![React](https://img.shields.io/badge/React-18-087ea4?logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript)](https://www.typescriptlang.org/)
 [![Local-first](https://img.shields.io/badge/local--first-yes-3fb950)](#프라이버시와-로컬-파일)
@@ -15,6 +16,8 @@
 ![Aura AI hero banner](docs/assets/readme/hero.png)
 
 **일곱 명의 AI 캐릭터와 대화하고, 기억은 내 컴퓨터의 파일로 보관하고, 이미지를 첨부하고, 필요하면 로컬 모델로 실행하세요.**
+
+**네이티브 macOS:** `AuraNative/`는 Aura의 SwiftUI macOS 클라이언트입니다. macOS에서는 브라우저 셸을 대체하는 방향으로 개발하며, 기존 Electron 앱은 마이그레이션 기간 동안 Windows 릴리즈 경로로 유지됩니다.
 
 [빠른 시작](#빠른-시작) · [영어한국어 에디션](#영어한국어-에디션) · [캐릭터 소개](#캐릭터-소개) · [이미지 채팅](#이미지-채팅) · [로컬 LLM 설정](#로컬-llm-설정) · [코드 에이전트 핸드오프](#코드-에이전트-핸드오프)
 
@@ -156,6 +159,36 @@ npm run llm:gemma4-v2
 | 업로드한 채팅 이미지 | 기본 `Documents/AuraAiKR`, 설정 가능 |
 
 네트워크 트래픽은 선택한 AI 제공자와, 웹 검색이 켜져 있을 때 선택한 검색 제공자로만 나갑니다.
+
+## 네이티브 macOS 클라이언트
+
+`AuraNative/`는 Aura를 브라우저 래퍼가 아닌, 경계가 분명한 작은 AI 팀으로 쓰고 싶은 사용자를 위한 SwiftUI macOS 앱입니다. 온보딩에서 모델 연결을 선택하고, 클라우드 프라이버시 검토를 설정한 뒤, 첫 팀 역할을 고릅니다.
+
+- 기존 Aura 친구가 중심입니다. **하나**(비서실장), **서윤**(피플/HR), **재민**(개발), **은별**(리서치), **민준**(IT), **길온**(제품 전략), **나이르**(디자인과 비전)를 그대로 만날 수 있습니다. **유진**은 법률 및 리스크 관점을 더합니다. 각 친구는 대화, 프로필 이미지, 캐릭터 기억을 분리해서 가집니다.
+- 팀 전체가 공유하는 공통 기억을 직접 편집할 수 있습니다.
+- 클라우드 요청 전 네이티브 프라이버시 검토를 제공합니다. 이메일, 전화번호, 카드번호, API 비밀값으로 보이는 항목을 로컬에서 플레이스홀더로 바꾸고, 전송 전에 사용자가 확인합니다. 응답은 Aura 화면에서만 다시 복원됩니다.
+- 워크스페이스와 데스크톱 작업을 위한 제한된 에이전트 하니스를 제공합니다. 선택한 워크스페이스 안의 읽기는 자동이지만, 다운로드 폴더 같은 개인 폴더는 Finder에서 명시적으로 허용해야 합니다. 파일 쓰기, 셸 명령, macOS 제어는 매번 한 번씩 승인이 필요합니다. 클릭과 타이핑에는 macOS 손쉬운 사용 권한도 필요합니다.
+- 하나의 채팅 입력창에서 텍스트와 여러 첨부 파일을 함께 보낼 수 있습니다. 파일당 최대 **20MB**까지 지원하며, 선택한 파일은 Aura의 전용 앱 데이터에 복사됩니다. Word(`.docx`), Excel(`.xlsx`), PDF, 이미지, Markdown, HTML, CSV, 텍스트 내용을 추출해 대화 맥락으로 유지하고, 작은 로컬 모델의 컨텍스트를 넘지 않도록 추출 텍스트 예산을 제한합니다.
+- 이미지와 스캔 PDF의 OCR은 macOS의 Apple Vision 프레임워크로 오프라인 실행됩니다. 모델 다운로드, Python 서비스, 클라우드 요청이 필요하지 않습니다. 실험적인 `baidu/Unlimited-OCR`은 공식 배포가 커스텀 Python/CUDA 추론과 수 GB 모델을 요구하므로 앱에 직접 포함하지 않았으며, 향후 선택형 외부 엔드포인트로 연결할 수 있습니다.
+- 도구 사용을 허용한 친구는 선택한 작업 폴더 안에 실제 `.xlsx` 워크북, 독립 실행형 HTML 보고서, Markdown 문서를 만들 수 있습니다. 파일을 쓰기 전에는 항상 미리보기와 승인을 요청합니다.
+
+도구 사용 스위치는 **설정 > 도구**에만 있습니다. 채팅 화면에는 반복해서 표시하지 않습니다.
+
+설정 창은 720 x 600 크기로 고정되어 탭을 바꿔도 크기가 변하거나 다시 중앙으로 이동하지 않습니다. 설정과 친구 추가 창에는 명시적인 닫기 버튼이 있습니다.
+
+사이드바에서 친구를 우클릭하고 **친구 편집**을 선택하면 네이티브 편집 창이 열립니다. 기본 프로필 사진 16개 중 하나로 되돌리거나 직접 사진을 업로드할 수 있고, 이름, 전문 분야, 한 줄 소개, 성격 지침을 설정할 수 있습니다. 같은 우클릭 메뉴에서 **기억 열기**도 사용할 수 있습니다.
+
+초기 네이티브 프라이버시 레이어는 의도적으로 보수적입니다. 별도로 검증된 온디바이스 분류기가 배포되기 전에는 이름이나 도로명 주소를 분류한다고 주장하지 않습니다.
+
+네이티브 온보딩의 기본 모델은 로컬 llama.cpp 엔드포인트의 **Gemma 4 E4B Instruct** (`gemma-4-E4B-it-Q4_K_M`)입니다. 설정 과정에서 다른 로컬 또는 클라우드 모델을 선택할 수 있습니다.
+
+```bash
+swift run --package-path AuraNative AuraAI
+./AuraNative/scripts/build-app.sh en
+./AuraNative/scripts/build-app.sh ko
+```
+
+번들 스크립트는 `build/AuraMale2.png`를 macOS 아이콘으로 패키징하고, ad-hoc 서명된 로컬 `.app`을 `release/`에 만듭니다.
 
 ## 기억
 

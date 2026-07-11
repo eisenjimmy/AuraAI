@@ -2,11 +2,12 @@
 
 # Aura AI
 
-**A private desktop AI companion with personalities, memory, images, and local LLM support.**
+**A private AI team with personalities, memory, images, local LLM support, and a native macOS client.**
 
 **Language:** English · [한국어](README.ko.md)
 
 [![Electron](https://img.shields.io/badge/Electron-33-2b2e3a?logo=electron)](https://www.electronjs.org/)
+[![SwiftUI](https://img.shields.io/badge/SwiftUI-native%20macOS-f05138?logo=swift)](AuraNative/)
 [![React](https://img.shields.io/badge/React-18-087ea4?logo=react)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript)](https://www.typescriptlang.org/)
 [![Local-first](https://img.shields.io/badge/local--first-yes-3fb950)](#privacy-and-local-files)
@@ -17,6 +18,8 @@
 **Talk to seven distinct AI companions. Keep your memories in plain files. Attach images. Run local when you want privacy.**
 
 **Editions:** Aura AI ships from one repository as an English edition and a Korean edition. The Korean build has Korean UI text, Korean persona names, Korean system prompts, and separate Korean default portraits.
+
+**Native macOS:** `AuraNative/` is Aura's SwiftUI macOS client. It replaces the browser-shell approach on macOS while the established Electron app remains the Windows-compatible release path during the migration.
 
 [Quick Start](#quick-start) · [Editions](#editions) · [Meet The Personas](#meet-the-personas) · [Image Chat](#image-chat) · [Local LLM Setup](#local-llm-setup) · [For Code Agents](#code-agent-handoff-prompt)
 
@@ -239,6 +242,36 @@ Network traffic goes only to:
 - Your selected AI provider
 - Your selected web search provider when web search is enabled
 
+## Native macOS Client
+
+`AuraNative/` is a SwiftUI macOS app for people who want Aura to feel like a small, bounded AI team rather than a browser wrapper. Its onboarding selects a model connection, configures cloud privacy review, and chooses the first team roles.
+
+- The familiar Aura friends stay at the center: **Nova** (Chief of Staff), **Sage** (People and HR), **Rio** (Developer), **Luna** (Research), **Max** (IT), **Gilleon** (Product Strategy), and **Neir** (Design and Vision). **Avery** adds a dedicated legal-and-risk perspective. Each keeps an isolated conversation, portrait, and character memory.
+- Editable global memory shared by the team.
+- Native cloud privacy review: high-confidence emails, phone numbers, payment-card numbers, and likely API secrets are replaced locally with placeholders, reviewed before send, then restored only in Aura's displayed response.
+- A bounded agent harness for workspace and desktop work. Reads inside the selected workspace are automatic; personal folders such as Downloads require an explicit Finder grant. File writes, shell commands, and macOS control require a one-time approval. Clicking and typing also require macOS Accessibility permission.
+- A single chat composer accepts text and multiple attachments together. Aura accepts files up to **20 MB each**, copies selected files into its private app data, extracts Word (`.docx`), Excel (`.xlsx`), PDF, image, Markdown, HTML, CSV, and text content, and keeps that context with the conversation. Extracted text is budgeted to fit small local-model context windows instead of sending an unbounded prompt.
+- Offline OCR uses Apple's Vision framework for images and scanned PDF pages. It requires no model download, Python service, or cloud request. The experimental `baidu/Unlimited-OCR` model is not embedded because its official distribution requires custom Python/CUDA inference and multi-gigabyte weights; it remains a possible optional external endpoint.
+- Friends with tools enabled can create real styled `.xlsx` workbooks, self-contained HTML reports, and Markdown documents inside the selected workspace. Every artifact write is previewed for approval.
+
+The agent harness switch lives only in **Settings > Tools**. Chat stays focused on the friend and the work; tool permissions are configured once rather than repeated in every conversation.
+
+Settings uses a stable 720 x 600 layout so switching tabs does not resize or recenter the modal. Settings and Add Friend both include explicit close buttons.
+
+Right-click any friend in the sidebar and choose **Edit friend** to open the native Friend Editor. It can restore any bundled template portrait, import a custom photo, and configure the friend's name, specialty, tagline, and personality instructions. **Open memory** remains available from the same context menu.
+
+The first native privacy layer is intentionally conservative. It does not claim to classify names or street addresses until Aura ships a separately verified on-device classifier.
+
+The native onboarding defaults to **Gemma 4 E4B Instruct** (`gemma-4-E4B-it-Q4_K_M`) at the local llama.cpp endpoint. Users can choose a different local or cloud model during setup.
+
+```bash
+swift run --package-path AuraNative AuraAI
+./AuraNative/scripts/build-app.sh en
+./AuraNative/scripts/build-app.sh ko
+```
+
+The bundle script packages `build/AuraMale2.png` as the macOS icon and writes an ad-hoc-signed local `.app` into `release/`.
+
 ## Build Releases
 
 ```bash
@@ -266,8 +299,11 @@ release/
 ## Project Structure
 
 ```text
+AuraNative/     Native SwiftUI macOS client, privacy review, agent harness
+  Sources/      App shell, storage, providers, team roles, and tools
+  Tests/        Native privacy behavior checks
 src/
-  common/       Shared types and persona definitions
+  common/       Shared types and persona definitions for Electron
   main/         Electron main process, storage, providers, memory, search
   preload/      Typed bridge between main and renderer
   renderer/     React UI, chat, settings, avatars, Kokoro voice queue
