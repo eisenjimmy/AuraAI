@@ -32,7 +32,7 @@ mkdir -p "$ICONSET"
 for spec in "16 16" "32 16@2x" "32 32" "64 32@2x" "128 128" "256 128@2x" "256 256" "512 256@2x" "512 512" "1024 512@2x"; do
   pixels="${spec%% *}"
   name="${spec#* }"
-  sips -z "$pixels" "$pixels" "$ROOT/build/AuraMale2.png" --out "$ICONSET/icon_${name}.png" >/dev/null
+  sips -z "$pixels" "$pixels" "$ROOT/build/aura.png" --out "$ICONSET/icon_${name}.png" >/dev/null
 done
 iconutil --convert icns "$ICONSET" --output "$APP/Contents/Resources/AppIcon.icns"
 /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string AppIcon" "$APP/Contents/Info.plist"

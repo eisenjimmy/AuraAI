@@ -22,6 +22,9 @@ enum LLMClientError: LocalizedError {
 
 struct OpenAICompatibleClient {
     func complete(messages: [ModelMessage], configuration: ProviderConfiguration) async throws -> String {
+        if configuration.kind == .anthropic {
+            return try await AnthropicMessagesClient().complete(messages: messages, configuration: configuration)
+        }
         guard let url = configuration.chatURL else { throw LLMClientError.invalidEndpoint }
         for attempt in 0..<5 {
             var request = URLRequest(url: url)
@@ -75,5 +78,116 @@ struct OpenAICompatibleClient {
             var message: ResponseMessage
         }
         var choices: [Choice]
+    }
+}
+
+private struct AnthropicMessagesClient {
+    func complete(messages: [ModelMessage], configuration: ProviderConfiguration) async throws -> String {
+        guard let url = configuration.messagesURL else { throw LLMClientError.invalidEndpoint }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 180
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(configuration.apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+
+        let system = messages
+            .filter { $0.role == "system" }
+            .map(\.content)
+            .joined(separator: "\n\n")
+        let conversation = messages
+            .filter { $0.role != "system" }
+            .map(AnthropicMessage.init)
+        request.httpBody = try JSONEncoder().encode(AnthropicRequest(
+            model: configuration.model,
+            maxTokens: 4_096,
+            system: system.isEmpty ? nil : system,
+            messages: conversation
+        ))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw LLMClientError.badResponse("The Claude endpoint did not return HTTP.")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let detail = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
+            throw LLMClientError.badResponse("Model request failed (\(http.statusCode)): \(detail.prefix(600))")
+        }
+        let decoded = try JSONDecoder().decode(AnthropicResponse.self, from: data)
+        let content = decoded.content.compactMap(\.text).joined(separator: "\n")
+        guard !content.isEmpty else { throw LLMClientError.missingContent }
+        return content
+    }
+
+    private struct AnthropicRequest: Encodable {
+        var model: String
+        var maxTokens: Int
+        var system: String?
+        var messages: [AnthropicMessage]
+
+        private enum CodingKeys: String, CodingKey {
+            case model
+            case maxTokens = "max_tokens"
+            case system
+            case messages
+        }
+    }
+
+    private struct AnthropicMessage: Encodable {
+        var role: String
+        var content: [ContentBlock]
+
+        init(_ message: ModelMessage) {
+            role = message.role == "assistant" ? "assistant" : "user"
+            content = [.text(message.content)] + message.imageURLs.compactMap(ContentBlock.image)
+        }
+    }
+
+    private struct ContentBlock: Encodable {
+        var type: String
+        var text: String?
+        var source: ImageSource?
+
+        static func text(_ value: String) -> Self {
+            Self(type: "text", text: value, source: nil)
+        }
+
+        static func image(_ dataURL: String) -> Self? {
+            guard let comma = dataURL.firstIndex(of: ",") else { return nil }
+            let metadata = String(dataURL[..<comma])
+            let data = String(dataURL[dataURL.index(after: comma)...])
+            guard metadata.hasPrefix("data:"), metadata.contains(";base64"), !data.isEmpty else { return nil }
+            let mediaType = metadata
+                .replacingOccurrences(of: "data:", with: "")
+                .replacingOccurrences(of: ";base64", with: "")
+            return Self(type: "image", text: nil, source: ImageSource(type: "base64", mediaType: mediaType, data: data))
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case type
+            case text
+            case source
+        }
+    }
+
+    private struct ImageSource: Encodable {
+        var type: String
+        var mediaType: String
+        var data: String
+
+        private enum CodingKeys: String, CodingKey {
+            case type
+            case mediaType = "media_type"
+            case data
+        }
+    }
+
+    private struct AnthropicResponse: Decodable {
+        struct Content: Decodable {
+            var type: String
+            var text: String?
+        }
+
+        var content: [Content]
     }
 }

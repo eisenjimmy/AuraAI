@@ -105,20 +105,11 @@ struct OnboardingView: View {
                     }
                 }
                 .pickerStyle(.radioGroup)
+                .onChange(of: store.settings.provider.kind) { _, kind in store.applyProviderPreset(kind) }
                 GroupBox {
-                    VStack(alignment: .leading, spacing: 10) {
-                        TextField(auraText("Server URL", "서버 URL"), text: $store.settings.provider.baseURL)
-                        TextField(auraText("Model", "모델"), text: $store.settings.provider.model)
-                        if store.settings.provider.kind.isCloud {
-                            SecureField(auraText("API key", "API 키"), text: $store.settings.provider.apiKey)
-                        } else {
-                            Text(auraText("Local default: your llama.cpp server at 127.0.0.1:8080. Aura never sends local-model prompts to a cloud service.", "기본 로컬 연결은 127.0.0.1:8080의 llama.cpp 서버입니다. 로컬 모델의 프롬프트는 클라우드로 보내지 않습니다."))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .textFieldStyle(.roundedBorder)
-                    .padding(4)
+                    ProviderConnectionFields()
+                        .textFieldStyle(.roundedBorder)
+                        .padding(4)
                 } label: {
                     Text(auraText("Connection", "연결"))
                 }
@@ -177,6 +168,36 @@ struct OnboardingView: View {
         let defaults = TeamMember.defaults.filter { selectedFriendIDs.contains($0.id) }
         guard !defaults.isEmpty else { return }
         store.setInitialTeam(defaults)
+    }
+}
+
+private struct ProviderConnectionFields: View {
+    @EnvironmentObject private var store: AuraStore
+
+    private var provider: ProviderKind { store.settings.provider.kind }
+    private var models: [String] {
+        let options = provider.modelOptions
+        let current = store.settings.provider.model
+        return options.contains(current) || current.isEmpty ? options : options + [current]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if !models.isEmpty {
+                Picker(auraText("Suggested model", "추천 모델"), selection: $store.settings.provider.model) {
+                    ForEach(models, id: \.self) { Text($0).tag($0) }
+                }
+            }
+            TextField(auraText("Model ID", "모델 ID"), text: $store.settings.provider.model)
+            TextField(auraText("API base URL", "API 기본 URL"), text: $store.settings.provider.baseURL)
+            if provider.isCloud {
+                SecureField(auraText("API key", "API 키"), text: $store.settings.provider.apiKey)
+            } else {
+                Text(auraText("Use your own llama.cpp server or keep Aura pointed at the local multimodal server configured during onboarding.", "직접 실행한 llama.cpp 서버를 사용하거나 온보딩에서 설정한 로컬 멀티모달 서버 연결을 유지하세요."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
@@ -941,16 +962,8 @@ struct SettingsView: View {
             Picker(auraText("Provider", "제공자"), selection: $store.settings.provider.kind) {
                 ForEach(ProviderKind.allCases) { Text($0.label).tag($0) }
             }
-            TextField(auraText("Server URL", "서버 URL"), text: $store.settings.provider.baseURL)
-            TextField(auraText("Model", "모델"), text: $store.settings.provider.model)
-            if store.settings.provider.kind.isCloud {
-                SecureField(auraText("API key", "API 키"), text: $store.settings.provider.apiKey)
-            }
-            if store.settings.provider.kind == .local {
-                Text(auraText("Use your own llama.cpp server or keep Aura pointed at the local server configured during onboarding.", "직접 실행한 llama.cpp 서버를 사용하거나 온보딩에서 설정한 로컬 서버 연결을 유지하세요."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+            .onChange(of: store.settings.provider.kind) { _, kind in store.applyProviderPreset(kind) }
+            ProviderConnectionFields()
         }
         .formStyle(.grouped)
     }

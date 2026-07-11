@@ -25,4 +25,22 @@ final class LLMClientTests: XCTestCase {
         XCTAssertEqual(content[1]["type"] as? String, "image_url")
         XCTAssertEqual((content[1]["image_url"] as? [String: String])?["url"], "data:image/png;base64,AA==")
     }
+
+    func testCloudProviderPresetsExposeEndpointAndModels() {
+        XCTAssertEqual(ProviderKind.openAI.defaultBaseURL, "https://api.openai.com/v1")
+        XCTAssertEqual(ProviderKind.anthropic.defaultBaseURL, "https://api.anthropic.com/v1")
+        XCTAssertEqual(ProviderKind.gemini.defaultBaseURL, "https://generativelanguage.googleapis.com/v1beta/openai")
+        XCTAssertEqual(ProviderKind.grok.defaultBaseURL, "https://api.x.ai/v1")
+        XCTAssertTrue(ProviderKind.anthropic.modelOptions.contains("claude-sonnet-5"))
+        XCTAssertTrue(ProviderKind.gemini.modelOptions.contains("gemini-3.5-flash"))
+        XCTAssertTrue(ProviderKind.openAI.modelOptions.contains("gpt-5-mini"))
+        XCTAssertTrue(ProviderKind.grok.modelOptions.contains("grok-4.3"))
+    }
+
+    func testClaudeMessagesURLUsesMessagesRoute() {
+        var configuration = ProviderConfiguration()
+        configuration.kind = .anthropic
+        configuration.baseURL = ProviderKind.anthropic.defaultBaseURL
+        XCTAssertEqual(configuration.messagesURL?.absoluteString, "https://api.anthropic.com/v1/messages")
+    }
 }

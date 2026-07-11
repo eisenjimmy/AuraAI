@@ -42,6 +42,9 @@ enum AuraWriteFolder {
 enum ProviderKind: String, Codable, CaseIterable, Identifiable {
     case local
     case openAI
+    case anthropic
+    case gemini
+    case grok
     case compatibleCloud
 
     var id: String { rawValue }
@@ -50,8 +53,43 @@ enum ProviderKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .local: return auraText("Local llama.cpp", "로컬 llama.cpp")
         case .openAI: return "OpenAI"
+        case .anthropic: return "Claude"
+        case .gemini: return "Gemini"
+        case .grok: return "Grok"
         case .compatibleCloud: return auraText("OpenAI-compatible cloud", "OpenAI 호환 클라우드")
         }
+    }
+
+    var defaultBaseURL: String {
+        switch self {
+        case .local: return "http://127.0.0.1:8080/v1"
+        case .openAI: return "https://api.openai.com/v1"
+        case .anthropic: return "https://api.anthropic.com/v1"
+        case .gemini: return "https://generativelanguage.googleapis.com/v1beta/openai"
+        case .grok: return "https://api.x.ai/v1"
+        case .compatibleCloud: return "https://"
+        }
+    }
+
+    var modelOptions: [String] {
+        switch self {
+        case .local:
+            return ["gemma-4-e4b-it", "gemma-4-E4B-it-Q4_K_M"]
+        case .openAI:
+            return ["gpt-5.1", "gpt-5-mini", "gpt-5-nano", "gpt-4.1"]
+        case .anthropic:
+            return ["claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5"]
+        case .gemini:
+            return ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-2.5-pro", "gemini-2.5-flash"]
+        case .grok:
+            return ["grok-4.3", "grok-build-0.1", "grok-4.5"]
+        case .compatibleCloud:
+            return []
+        }
+    }
+
+    var defaultModel: String {
+        modelOptions.first ?? ""
     }
 }
 
@@ -64,6 +102,11 @@ struct ProviderConfiguration: Codable, Equatable {
     var chatURL: URL? {
         let normalized = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
         return URL(string: normalized + "/chat/completions")
+    }
+
+    var messagesURL: URL? {
+        let normalized = baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+        return URL(string: normalized + "/messages")
     }
 }
 

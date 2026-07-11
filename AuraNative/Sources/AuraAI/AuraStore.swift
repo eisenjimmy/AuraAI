@@ -52,6 +52,15 @@ final class AuraStore: ObservableObject {
     func effectiveSkills(for member: TeamMember) -> AgentSkillSettings { skillSettings.limited(to: member) }
     func isWorking(for member: TeamMember) -> Bool { isWorking && activeWorkingMemberID == member.id }
 
+    func applyProviderPreset(_ kind: ProviderKind) {
+        settings.provider.kind = kind
+        settings.provider.baseURL = kind.defaultBaseURL
+        if !kind.defaultModel.isEmpty {
+            settings.provider.model = kind.defaultModel
+        }
+        saveSettings()
+    }
+
     var globalMemory: String { persistence.globalMemory() }
     var globalMemoryVaultURL: URL { persistence.globalMemoryVault().url }
     func memberMemoryVaultURL(_ member: TeamMember) -> URL { persistence.memberMemoryVault(member.id).url }
