@@ -406,6 +406,8 @@ private struct ChatView: View {
                 Button { store.memoryMember = member } label: { Image(systemName: "brain.head.profile") }
                     .help(auraText("Character memory", "캐릭터별 기억"))
                     .buttonStyle(.plain)
+                    .focusable(false)
+                    .focusEffectDisabled()
             }
             .padding(.horizontal, 22)
             .padding(.vertical, 14)

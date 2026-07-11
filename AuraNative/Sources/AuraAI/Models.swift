@@ -549,8 +549,12 @@ enum ToolProtocolSanitizer {
         text.range(of: "<tool_call", options: [.caseInsensitive]) != nil
     }
 
+    static func containsInternalProtocol(in text: String) -> Bool {
+        containsToolCall(in: text) || text.range(of: "<tool_result", options: [.caseInsensitive]) != nil
+    }
+
     static func userVisibleText(from text: String) -> String {
-        guard containsToolCall(in: text) else { return text }
+        guard containsInternalProtocol(in: text) else { return text }
         return auraText(
             "An earlier request did not complete, so no verified file was attached. Please ask again and I will create it safely.",
             "이전 요청이 완료되지 않아 검증된 파일이 첨부되지 않았습니다. 다시 요청해 주시면 안전하게 만들어 드릴게요."

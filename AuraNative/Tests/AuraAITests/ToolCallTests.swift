@@ -77,4 +77,12 @@ final class ToolCallTests: XCTestCase {
         XCTAssertFalse(message.modelContent.contains("<tool_call"))
         XCTAssertTrue(message.displayContent.contains("완료되지") || message.displayContent.contains("did not complete"))
     }
+
+    func testSavedToolResultIsNeverRenderedOrReusedAsConversationText() {
+        let raw = "<tool_result>{\"files\":[\"notes.md\"]}</tool_result>"
+        let message = ConversationMessage(role: .assistant, content: raw)
+        XCTAssertTrue(ToolProtocolSanitizer.containsInternalProtocol(in: raw))
+        XCTAssertFalse(message.displayContent.contains("<tool_result"))
+        XCTAssertFalse(message.modelContent.contains("<tool_result"))
+    }
 }

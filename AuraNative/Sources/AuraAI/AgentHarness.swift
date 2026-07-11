@@ -140,7 +140,7 @@ struct AgentHarness {
                         return AgentRunResult(response: error.localizedDescription, attachments: [], events: events)
                     }
                 }
-                if ToolProtocolSanitizer.containsToolCall(in: reply) {
+                if ToolProtocolSanitizer.containsInternalProtocol(in: reply) {
                     return AgentRunResult(
                         response: ToolProtocolSanitizer.userVisibleText(from: reply),
                         attachments: generatedAttachments,
