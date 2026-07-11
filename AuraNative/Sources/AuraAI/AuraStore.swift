@@ -331,7 +331,10 @@ final class AuraStore: ObservableObject {
         let workspace = settings.workspacePath.isEmpty ? nil : URL(fileURLWithPath: settings.workspacePath)
         let authorizedFolders = settings.authorizedFolderPaths.map { URL(fileURLWithPath: $0) }
         let skills = effectiveSkills(for: member)
-        let agentMode = settings.agentModeEnabled || (skills.isEnabled(.spreadsheet) && SpreadsheetIntent.isRequested(text))
+        // Decide the output type only from what the person typed. `text` also
+        // includes attachment contents, which may mention unrelated formats.
+        let requestedArtifact = ArtifactIntent.requested(in: displayText)
+        let agentMode = settings.agentModeEnabled || requestedArtifact.map { skills.isEnabled($0.skill) } == true
 
         Task {
             do {
@@ -348,6 +351,7 @@ final class AuraStore: ObservableObject {
                         workspace: workspace,
                         authorizedFolders: authorizedFolders,
                         skills: skills,
+                        requestedArtifact: requestedArtifact,
                         requestFolder: { name in await self.requestFolderAccess(named: name) },
                         approval: { approval in await self.requestApproval(approval) },
                         onEvent: { event in self.harnessEvents.append(event) }

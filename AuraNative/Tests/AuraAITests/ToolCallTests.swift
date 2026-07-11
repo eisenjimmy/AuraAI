@@ -43,4 +43,17 @@ final class ToolCallTests: XCTestCase {
         XCTAssertTrue(SpreadsheetIntent.isRequested("Create an Excel workbook"))
         XCTAssertFalse(SpreadsheetIntent.isRequested("Explain this document"))
     }
+
+    func testPresentationTakesPrecedenceOverSpreadsheetSourceMaterial() {
+        XCTAssertEqual(
+            ArtifactIntent.requested(in: "Make a PowerPoint from this Excel workbook."),
+            .presentation
+        )
+        XCTAssertEqual(
+            ArtifactIntent.requested(in: "이 엑셀 자료로 파워포인트 슬라이드를 만들어줘"),
+            .presentation
+        )
+        XCTAssertTrue(ArtifactIntent.presentation.conflicts(with: "create_spreadsheet"))
+        XCTAssertFalse(ArtifactIntent.presentation.conflicts(with: "create_presentation"))
+    }
 }

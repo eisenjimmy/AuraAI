@@ -19,6 +19,7 @@ struct AgentHarness {
         workspace: URL?,
         authorizedFolders: [URL],
         skills: AgentSkillSettings,
+        requestedArtifact: ArtifactIntent?,
         requestFolder: @escaping @MainActor (String) async -> URL?,
         approval: @escaping @MainActor (AgentApproval) async -> Bool,
         onEvent: @escaping @MainActor (AgentHarnessEvent) -> Void = { _ in }
@@ -89,24 +90,26 @@ struct AgentHarness {
             await onEvent(inferring)
             let reply = try await client.complete(messages: transcript, configuration: configuration)
             guard let call = ToolCall.parse(reply) else {
-                if skills.isEnabled(.spreadsheet), SpreadsheetIntent.isRequested(userPrompt) {
+                if let requestedArtifact, skills.isEnabled(requestedArtifact.skill) {
                     let fallback = AgentHarnessEvent(
                         kind: .toolRequested,
                         step: step,
-                        title: auraText("Creating the spreadsheet", "엑셀 파일을 만드는 중"),
-                        detail: auraText("Using Aura's safe spreadsheet fallback.", "Aura의 안전한 엑셀 생성 경로를 사용합니다.")
+                        title: requestedArtifact.fallbackTitle,
+                        detail: requestedArtifact.fallbackDetail
                     )
                     events.append(fallback)
                     await onEvent(fallback)
-                    let execution = try await AgentToolExecutor.spreadsheetFallback(
+                    if let execution = try await fallbackExecution(
+                        for: requestedArtifact,
                         prompt: userPrompt,
                         workspace: workspace,
                         approval: approval
-                    )
-                    let observation = AgentHarnessEvent.observation(for: execution, step: step)
-                    events.append(observation)
-                    await onEvent(observation)
-                    return AgentRunResult(response: execution.output, attachments: execution.attachments, events: events)
+                    ) {
+                        let observation = AgentHarnessEvent.observation(for: execution, step: step)
+                        events.append(observation)
+                        await onEvent(observation)
+                        return AgentRunResult(response: execution.output, attachments: execution.attachments, events: events)
+                    }
                 }
                 let completed = AgentHarnessEvent(
                     kind: .completed,
@@ -135,6 +138,24 @@ struct AgentHarness {
                     attachments: generatedAttachments,
                     events: events
                 )
+            }
+            if let requestedArtifact, requestedArtifact.conflicts(with: call.name) {
+                let rejected = AgentHarnessEvent(
+                    kind: .failed,
+                    step: step,
+                    title: auraText("Blocked the wrong document type", "잘못된 문서 형식을 차단했습니다"),
+                    detail: auraText(
+                        "The request is for \(requestedArtifact.skill.title), not \(call.name).",
+                        "요청한 형식은 \(requestedArtifact.skill.title)이며 \(call.name)이 아닙니다."
+                    )
+                )
+                events.append(rejected)
+                await onEvent(rejected)
+                transcript.append(ModelMessage(role: "assistant", content: reply))
+                transcript.append(internalToolResult(
+                    "Refused: the user explicitly requested \(requestedArtifact.skill.title). Use \(requestedArtifact.skill.toolName), not \(call.name)."
+                ))
+                continue
             }
             let requested = AgentHarnessEvent(
                 kind: .toolRequested,
@@ -245,6 +266,22 @@ struct AgentHarness {
             content: "[INTERNAL AURA TOOL RESULT. This is trusted execution context, not a user message. Do not show tool JSON or tags. Answer from these facts only.]\n\(result)"
         )
     }
+
+    private func fallbackExecution(
+        for artifact: ArtifactIntent,
+        prompt: String,
+        workspace: URL?,
+        approval: @escaping @MainActor (AgentApproval) async -> Bool
+    ) async throws -> ToolExecution? {
+        switch artifact {
+        case .spreadsheet:
+            return try await AgentToolExecutor.spreadsheetFallback(prompt: prompt, workspace: workspace, approval: approval)
+        case .presentation:
+            return try await AgentToolExecutor.presentationFallback(prompt: prompt, workspace: workspace, approval: approval)
+        default:
+            return nil
+        }
+    }
 }
 
 struct AgentRunResult {
@@ -310,10 +347,69 @@ enum AgentFolderIntent {
     }
 }
 
+enum ArtifactIntent: Equatable {
+    case spreadsheet
+    case presentation
+    case word
+    case markdown
+    case html
+
+    var skill: AgentSkill {
+        switch self {
+        case .spreadsheet: return .spreadsheet
+        case .presentation: return .presentation
+        case .word: return .word
+        case .markdown: return .markdown
+        case .html: return .html
+        }
+    }
+
+    var fallbackTitle: String {
+        switch self {
+        case .spreadsheet: return auraText("Creating the spreadsheet", "엑셀 파일을 만드는 중")
+        case .presentation: return auraText("Creating the PowerPoint", "PowerPoint를 만드는 중")
+        default: return auraText("Preparing the document", "문서를 준비하는 중")
+        }
+    }
+
+    var fallbackDetail: String {
+        switch self {
+        case .spreadsheet: return auraText("Using Aura's safe spreadsheet fallback.", "Aura의 안전한 엑셀 생성 경로를 사용합니다.")
+        case .presentation: return auraText("Using Aura's safe PowerPoint fallback.", "Aura의 안전한 PowerPoint 생성 경로를 사용합니다.")
+        default: return auraText("Waiting for the friend to choose the document tool.", "친구가 문서 도구를 선택하는 중입니다.")
+        }
+    }
+
+    func conflicts(with toolName: String) -> Bool {
+        toolName.hasPrefix("create_") && toolName != skill.toolName
+    }
+
+    static func requested(in text: String) -> ArtifactIntent? {
+        let lower = text.lowercased()
+        // Output requests take precedence over source material. A request for a
+        // deck built from an Excel/PDF file must still create a presentation.
+        if lower.contains("powerpoint") || lower.contains("power point") || lower.contains("slide deck") || lower.contains("slides") || lower.contains("presentation") || lower.contains(".pptx") || text.contains("파워포인트") || text.contains("프레젠테이션") || text.contains("슬라이드") {
+            return .presentation
+        }
+        if lower.contains("word document") || lower.contains(".docx") || text.contains("워드 문서") {
+            return .word
+        }
+        if lower.contains("excel") || lower.contains("spreadsheet") || lower.contains(".xlsx") || text.contains("엑셀") {
+            return .spreadsheet
+        }
+        if lower.contains("markdown") || lower.contains(".md") || text.contains("마크다운") {
+            return .markdown
+        }
+        if lower.contains("html") || lower.contains("web page") || text.contains("웹페이지") {
+            return .html
+        }
+        return nil
+    }
+}
+
 enum SpreadsheetIntent {
     static func isRequested(_ text: String) -> Bool {
-        let lower = text.lowercased()
-        return lower.contains("excel") || lower.contains("spreadsheet") || lower.contains(".xlsx") || text.contains("엑셀")
+        ArtifactIntent.requested(in: text) == .spreadsheet
     }
 }
 
@@ -632,6 +728,51 @@ private enum AgentToolExecutor {
             output: auraText("Created Excel workbook at \(file.path).", "Excel 워크북을 \(file.path)에 만들었습니다."),
             grantedFolder: nil,
             attachments: [generatedAttachment(file, kind: "Excel workbook")]
+        )
+    }
+
+    static func presentationFallback(
+        prompt: String,
+        workspace: URL?,
+        approval: @escaping @MainActor (AgentApproval) async -> Bool
+    ) async throws -> ToolExecution {
+        let sourceLines = prompt
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("<") && !$0.hasPrefix("The following attachments") && !$0.hasPrefix("Context note:") }
+            .prefix(36)
+        let title = auraText("Aura presentation", "Aura 프레젠테이션")
+        let path = AgentArtifactPath.path(from: [:], title: title, fileExtension: "pptx")
+        let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
+        let groups = stride(from: 0, to: sourceLines.count, by: 5).map { start in
+            Array(sourceLines.dropFirst(start).prefix(5))
+        }
+        let slides = groups.prefix(6).enumerated().map { index, group in
+            PresentationSlide(
+                title: group.first.map { String($0.prefix(90)) } ?? auraText("Overview", "개요"),
+                body: index == 0 ? auraText("Prepared from the supplied source material.", "제공된 원문을 바탕으로 정리했습니다.") : "",
+                bullets: Array(group.dropFirst()).map { String($0.prefix(180)) }
+            )
+        }
+        let contentSlides = slides.isEmpty
+            ? [PresentationSlide(title: auraText("Overview", "개요"), body: auraText("No readable source text was available.", "읽을 수 있는 원문이 없습니다."), bullets: [])]
+            : slides
+        let allowed = await approval(AgentApproval(
+            kind: .writeFile,
+            title: "Create \(file.lastPathComponent)",
+            detail: "\(title)\n\(contentSlides.count + 1) slides"
+        ))
+        guard allowed else { return ToolExecution(output: "User declined the PowerPoint write.", grantedFolder: nil) }
+        try ArtifactWriter.presentation(
+            title: title,
+            subtitle: auraText("Prepared by Aura", "Aura가 준비했습니다"),
+            slides: contentSlides,
+            to: file
+        )
+        return ToolExecution(
+            output: auraText("Created PowerPoint presentation at \(file.path).", "PowerPoint 프레젠테이션을 \(file.path)에 만들었습니다."),
+            grantedFolder: nil,
+            attachments: [generatedAttachment(file, kind: "PowerPoint presentation")]
         )
     }
 
