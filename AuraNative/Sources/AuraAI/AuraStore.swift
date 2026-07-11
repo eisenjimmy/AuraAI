@@ -13,6 +13,7 @@ final class AuraStore: ObservableObject {
     @Published var pendingAttachments: [ChatAttachment] = []
     @Published var isExtractingAttachments = false
     @Published var isWorking = false
+    @Published var harnessEvents: [AgentHarnessEvent] = []
     @Published var pendingPrivacy: PrivacyReview?
     @Published var pendingApproval: AgentApproval?
     @Published var errorMessage: String?
@@ -321,6 +322,7 @@ final class AuraStore: ObservableObject {
         messages.append(user)
         persistence.saveConversation(messages, memberID: member.id)
         isWorking = true
+        harnessEvents = []
 
         let history = messages.dropLast()
         let config = settings.provider
@@ -347,7 +349,8 @@ final class AuraStore: ObservableObject {
                         authorizedFolders: authorizedFolders,
                         skills: skills,
                         requestFolder: { name in await self.requestFolderAccess(named: name) },
-                        approval: { approval in await self.requestApproval(approval) }
+                        approval: { approval in await self.requestApproval(approval) },
+                        onEvent: { event in self.harnessEvents.append(event) }
                     )
                     response = result.response
                     responseAttachments = result.attachments

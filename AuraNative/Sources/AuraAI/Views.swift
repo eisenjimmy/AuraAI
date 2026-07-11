@@ -395,12 +395,7 @@ private struct ChatView: View {
                                 .id(message.id)
                         }
                         if store.isWorking {
-                            HStack(spacing: 8) {
-                                TeamAvatar(member: member, size: 25)
-                                ProgressView().controlSize(.small)
-                                Text(store.settings.agentModeEnabled ? auraText("Working through the task...", "작업 진행 중...") : auraText("Thinking...", "생각 중..."))
-                                    .foregroundStyle(.secondary)
-                            }
+                            WorkingActivityView(member: member, events: store.harnessEvents, agentMode: store.settings.agentModeEnabled || !store.harnessEvents.isEmpty)
                             .id("working")
                         }
                     }
@@ -414,6 +409,9 @@ private struct ChatView: View {
                 }
                 .onChange(of: store.isWorking) { _, working in
                     if working { proxy.scrollTo("working", anchor: .bottom) }
+                }
+                .onChange(of: store.harnessEvents.count) { _, _ in
+                    if store.isWorking { proxy.scrollTo("working", anchor: .bottom) }
                 }
             }
 
@@ -465,6 +463,35 @@ private struct ChatView: View {
             .padding(.vertical, 14)
             .background(.bar)
         }
+    }
+}
+
+private struct WorkingActivityView: View {
+    let member: TeamMember
+    let events: [AgentHarnessEvent]
+    let agentMode: Bool
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            TeamAvatar(member: member, size: 25)
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 7) {
+                    ProgressView().controlSize(.small)
+                    Text(agentMode ? auraText("Working through the task...", "작업 진행 중...") : auraText("Thinking...", "생각 중..."))
+                        .foregroundStyle(.secondary)
+                }
+                if let event = events.last {
+                    Text(event.title)
+                        .font(.caption.weight(.medium))
+                    Text(event.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer()
+        }
+        .padding(.vertical, 3)
     }
 }
 

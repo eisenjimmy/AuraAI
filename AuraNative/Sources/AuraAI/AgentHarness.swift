@@ -2,9 +2,9 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-/// A deliberately small agent protocol. The model may request one operation in
-/// a tagged JSON block; Aura owns parsing, scope checks, approval, execution,
-/// and the iteration cap.
+/// Aura's basic, permissioned agent loop. The model can propose one structured
+/// operation at a time; the harness validates, approves, executes, observes,
+/// and bounds every iteration.
 struct AgentHarness {
     private let client = OpenAICompatibleClient()
     private let maximumSteps = 8
@@ -20,12 +20,24 @@ struct AgentHarness {
         authorizedFolders: [URL],
         skills: AgentSkillSettings,
         requestFolder: @escaping @MainActor (String) async -> URL?,
-        approval: @escaping @MainActor (AgentApproval) async -> Bool
+        approval: @escaping @MainActor (AgentApproval) async -> Bool,
+        onEvent: @escaping @MainActor (AgentHarnessEvent) -> Void = { _ in }
     ) async throws -> AgentRunResult {
         var generatedAttachments: [ChatAttachment] = []
+        var events: [AgentHarnessEvent] = []
+        var loopGuard = AgentLoopGuard()
         var readableFolders = authorizedFolders.map(\.standardizedFileURL)
         let requestedFolder = AgentFolderIntent.explicitFolder(in: userPrompt)
         var initialFolderResult: String?
+
+        let received = AgentHarnessEvent(
+            kind: .received,
+            step: 0,
+            title: auraText("Task received", "작업을 받았습니다"),
+            detail: auraText("Understanding the request and preparing a safe plan.", "요청을 이해하고 안전한 작업 순서를 준비합니다.")
+        )
+        events.append(received)
+        await onEvent(received)
 
         // A clear request for a well-known user folder is an explicit user
         // intent. Ask the user to select it before a fallible model can fall
@@ -33,7 +45,15 @@ struct AgentHarness {
         if let requestedFolder,
            !readableFolders.contains(where: { $0.lastPathComponent.caseInsensitiveCompare(requestedFolder) == .orderedSame }) {
             guard let grantedFolder = await requestFolder(requestedFolder) else {
-                return AgentRunResult(response: "I couldn't inspect \(requestedFolder) because folder access was not granted.", attachments: [])
+                let denied = AgentHarnessEvent(
+                    kind: .denied,
+                    step: 0,
+                    title: auraText("Folder access was not granted", "폴더 접근이 허용되지 않았습니다"),
+                    detail: requestedFolder
+                )
+                events.append(denied)
+                await onEvent(denied)
+                return AgentRunResult(response: "I couldn't inspect \(requestedFolder) because folder access was not granted.", attachments: [], events: events)
             }
             readableFolders.append(grantedFolder.standardizedFileURL)
         }
@@ -58,19 +78,72 @@ struct AgentHarness {
             transcript.append(internalToolResult(initialFolderResult))
         }
 
-        for _ in 0..<maximumSteps {
+        for step in 1...maximumSteps {
+            let inferring = AgentHarnessEvent(
+                kind: .inferring,
+                step: step,
+                title: auraText("Thinking through the next step", "다음 단계를 판단하는 중"),
+                detail: auraText("Using the available workspace context and approved tools.", "작업 공간 맥락과 허용된 도구를 사용합니다.")
+            )
+            events.append(inferring)
+            await onEvent(inferring)
             let reply = try await client.complete(messages: transcript, configuration: configuration)
             guard let call = ToolCall.parse(reply) else {
                 if skills.isEnabled(.spreadsheet), SpreadsheetIntent.isRequested(userPrompt) {
+                    let fallback = AgentHarnessEvent(
+                        kind: .toolRequested,
+                        step: step,
+                        title: auraText("Creating the spreadsheet", "엑셀 파일을 만드는 중"),
+                        detail: auraText("Using Aura's safe spreadsheet fallback.", "Aura의 안전한 엑셀 생성 경로를 사용합니다.")
+                    )
+                    events.append(fallback)
+                    await onEvent(fallback)
                     let execution = try await AgentToolExecutor.spreadsheetFallback(
                         prompt: userPrompt,
                         workspace: workspace,
                         approval: approval
                     )
-                    return AgentRunResult(response: execution.output, attachments: execution.attachments)
+                    let observation = AgentHarnessEvent.observation(for: execution, step: step)
+                    events.append(observation)
+                    await onEvent(observation)
+                    return AgentRunResult(response: execution.output, attachments: execution.attachments, events: events)
                 }
-                return AgentRunResult(response: reply, attachments: generatedAttachments)
+                let completed = AgentHarnessEvent(
+                    kind: .completed,
+                    step: step,
+                    title: auraText("Task complete", "작업 완료"),
+                    detail: auraText("The friend has finished the response.", "친구가 응답을 마쳤습니다.")
+                )
+                events.append(completed)
+                await onEvent(completed)
+                return AgentRunResult(response: reply, attachments: generatedAttachments, events: events)
             }
+            guard loopGuard.allows(call) else {
+                let stopped = AgentHarnessEvent(
+                    kind: .failed,
+                    step: step,
+                    title: auraText("Stopped a repeated tool request", "반복된 도구 요청을 중단했습니다"),
+                    detail: auraText("\(call.name) was requested too many times without new progress.", "\(call.name) 요청이 새로운 진전 없이 너무 많이 반복되었습니다.")
+                )
+                events.append(stopped)
+                await onEvent(stopped)
+                return AgentRunResult(
+                    response: auraText(
+                        "I stopped because the same tool request repeated without producing new progress. Please refine the request or review the last tool result.",
+                        "같은 도구 요청이 새로운 진전 없이 반복되어 중단했습니다. 요청을 조금 더 구체화하거나 마지막 도구 결과를 확인해 주세요."
+                    ),
+                    attachments: generatedAttachments,
+                    events: events
+                )
+            }
+            let requested = AgentHarnessEvent(
+                kind: .toolRequested,
+                step: step,
+                title: auraText("Requested \(call.name)", "\(call.name) 도구 요청"),
+                detail: call.safeSummary
+            )
+            events.append(requested)
+            await onEvent(requested)
             let execution = try await AgentToolExecutor.execute(
                 call,
                 workspace: workspace,
@@ -83,12 +156,24 @@ struct AgentHarness {
                 readableFolders.append(grantedFolder)
             }
             generatedAttachments += execution.attachments
+            let observation = AgentHarnessEvent.observation(for: execution, step: step)
+            events.append(observation)
+            await onEvent(observation)
             transcript.append(ModelMessage(role: "assistant", content: reply))
             transcript.append(internalToolResult(execution.output))
         }
+        let limitReached = AgentHarnessEvent(
+            kind: .failed,
+            step: maximumSteps,
+            title: auraText("Tool-step limit reached", "도구 단계 한도에 도달했습니다"),
+            detail: auraText("Aura stopped after \(maximumSteps) bounded tool steps.", "Aura는 \(maximumSteps)회의 제한된 도구 단계를 마치고 중단했습니다.")
+        )
+        events.append(limitReached)
+        await onEvent(limitReached)
         return AgentRunResult(
             response: "I stopped after \(maximumSteps) tool steps. The work may be incomplete; review the activity and continue with a more specific instruction.",
-            attachments: generatedAttachments
+            attachments: generatedAttachments,
+            events: events
         )
     }
 
@@ -165,6 +250,54 @@ struct AgentHarness {
 struct AgentRunResult {
     var response: String
     var attachments: [ChatAttachment]
+    var events: [AgentHarnessEvent] = []
+}
+
+enum AgentHarnessEventKind: String, Codable, Equatable, Sendable {
+    case received
+    case inferring
+    case toolRequested
+    case observation
+    case denied
+    case completed
+    case failed
+}
+
+/// A concise, user-visible trace. Full model reasoning and raw tool output
+/// remain private; the event only records the operation and its outcome.
+struct AgentHarnessEvent: Identifiable, Codable, Equatable, Sendable {
+    var id = UUID()
+    var kind: AgentHarnessEventKind
+    var step: Int
+    var title: String
+    var detail: String
+    var createdAt = Date()
+
+    static func observation(for execution: ToolExecution, step: Int) -> AgentHarnessEvent {
+        let output = execution.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isDenied = output.localizedCaseInsensitiveContains("declined") || output.localizedCaseInsensitiveContains("cancelled")
+        let isFailure = output.hasPrefix("Refused:") || output.hasPrefix("Unknown tool") || output.hasPrefix("The ") && output.localizedCaseInsensitiveContains("skill is disabled")
+        return AgentHarnessEvent(
+            kind: isDenied ? .denied : (isFailure ? .failed : .observation),
+            step: step,
+            title: isDenied
+                ? auraText("Action not approved", "작업이 승인되지 않았습니다")
+                : (isFailure ? auraText("Tool could not complete", "도구를 완료할 수 없습니다") : auraText("Tool result recorded", "도구 결과를 기록했습니다")),
+            detail: String(output.prefix(220))
+        )
+    }
+}
+
+/// Prevents small local models from spinning on a request whose prior result
+/// is already in the transcript. Two attempts are allowed for benign repairs.
+struct AgentLoopGuard {
+    private var requestCounts: [String: Int] = [:]
+
+    mutating func allows(_ call: ToolCall) -> Bool {
+        let signature = call.signature
+        requestCounts[signature, default: 0] += 1
+        return requestCounts[signature, default: 0] <= 2
+    }
 }
 
 enum AgentFolderIntent {
@@ -187,6 +320,19 @@ enum SpreadsheetIntent {
 struct ToolCall: Decodable {
     var name: String
     var arguments: [String: JSONValue]
+
+    var signature: String {
+        let serializedArguments = arguments.keys.sorted().map { key in
+            "\(key)=\(arguments[key]?.stableText ?? "null")"
+        }.joined(separator: "&")
+        return "\(name):\(serializedArguments)"
+    }
+
+    var safeSummary: String {
+        let keys = arguments.keys.sorted()
+        guard !keys.isEmpty else { return auraText("No arguments", "인수 없음") }
+        return auraText("Arguments: \(keys.joined(separator: ", "))", "인수: \(keys.joined(separator: ", "))")
+    }
 
     static func parse(_ text: String) -> ToolCall? {
         guard let start = text.range(of: "<tool_call>"),
@@ -263,9 +409,24 @@ enum JSONValue: Decodable {
     var intValue: Int? { if case .number(let value) = self { return Int(value) } else { return nil } }
     var arrayValue: [JSONValue]? { if case .array(let value) = self { return value } else { return nil } }
     var objectValue: [String: JSONValue]? { if case .object(let value) = self { return value } else { return nil } }
+
+    var stableText: String {
+        switch self {
+        case .string(let value): return "string:\(value)"
+        case .number(let value): return "number:\(value)"
+        case .boolean(let value): return "boolean:\(value)"
+        case .object(let value):
+            let serializedObject = value.keys.sorted().map { key in
+                "\(key):\(value[key]?.stableText ?? "null")"
+            }.joined(separator: ",")
+            return "object:{\(serializedObject)}"
+        case .array(let value): return "array:[\(value.map(\.stableText).joined(separator: ","))]"
+        case .null: return "null"
+        }
+    }
 }
 
-private struct ToolExecution {
+struct ToolExecution {
     var output: String
     var grantedFolder: URL?
     var attachments: [ChatAttachment] = []
