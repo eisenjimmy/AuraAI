@@ -160,8 +160,8 @@ struct ToolCall: Decodable {
     var arguments: [String: JSONValue]
 
     static func parse(_ text: String) -> ToolCall? {
-        guard let start = text.range(of: "<tool_call>"), let end = text.range(of: "</tool_call>") else { return nil }
-        let json = String(text[start.upperBound..<end.lowerBound])
+        guard let start = text.range(of: "<tool_call>"),
+              let json = firstJSONObject(in: text[start.upperBound...]) else { return nil }
         let data = Data(json.utf8)
         if let call = try? JSONDecoder().decode(ToolCall.self, from: data) { return call }
 
@@ -174,6 +174,41 @@ struct ToolCall: Decodable {
             return nil
         }
         return ToolCall(name: name, arguments: arguments)
+    }
+
+    /// Local models occasionally omit the closing tag or add a stray token
+    /// after valid JSON. Recover the first balanced object without accepting
+    /// arbitrary trailing model prose as tool input.
+    private static func firstJSONObject(in text: Substring) -> String? {
+        guard let objectStart = text.firstIndex(of: "{") else { return nil }
+        var depth = 0
+        var inString = false
+        var escaped = false
+        var index = objectStart
+
+        while index < text.endIndex {
+            let character = text[index]
+            if inString {
+                if escaped {
+                    escaped = false
+                } else if character == "\\" {
+                    escaped = true
+                } else if character == "\"" {
+                    inString = false
+                }
+            } else if character == "\"" {
+                inString = true
+            } else if character == "{" {
+                depth += 1
+            } else if character == "}" {
+                depth -= 1
+                if depth == 0 {
+                    return String(text[objectStart...index])
+                }
+            }
+            index = text.index(after: index)
+        }
+        return nil
     }
 }
 

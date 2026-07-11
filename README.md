@@ -253,7 +253,7 @@ Network traffic goes only to:
 - A single chat composer accepts text and multiple attachments together. Aura accepts files up to **20 MB each**, copies selected files into its private app data, extracts Word (`.docx`), Excel (`.xlsx`), PDF, image, Markdown, HTML, CSV, and text content, and keeps that context with the conversation. Extracted text is budgeted to fit small local-model context windows instead of sending an unbounded prompt.
 - Offline OCR uses Apple's Vision framework for images and scanned PDF pages. It requires no model download, Python service, or cloud request. The experimental `baidu/Unlimited-OCR` model is not embedded because its official distribution requires custom Python/CUDA inference and multi-gigabyte weights; it remains a possible optional external endpoint.
 - Friends with tools enabled can create real styled `.xlsx` workbooks, self-contained HTML reports, and Markdown documents inside the selected workspace. Every artifact write is previewed for approval.
-- Generated documents appear as clickable file attachments on the friend’s reply. Aura accepts both the documented tool-call JSON envelope and the flat JSON form produced by some local models.
+- Generated documents appear as clickable file attachments on the friend’s reply. Aura accepts both the documented tool-call JSON envelope and the flat JSON form produced by some local models, including recoverable replies that omit a closing tool tag.
 
 The agent harness switch lives only in **Settings > Tools**. Chat stays focused on the friend and the work; tool permissions are configured once rather than repeated in every conversation.
 

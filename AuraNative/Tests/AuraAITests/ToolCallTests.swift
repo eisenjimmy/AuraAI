@@ -14,4 +14,14 @@ final class ToolCallTests: XCTestCase {
         XCTAssertEqual(call.arguments["path"]?.stringValue, "friends.xlsx")
         XCTAssertEqual(call.arguments["rows"]?.arrayValue?.count, 1)
     }
+
+    func testRecoversFlatToolCallWithoutClosingTag() throws {
+        let response = """
+        <tool_call>{"name":"create_spreadsheet","path":"cinderella_cast.xlsx","sheet":"Characters","title":"Cinderella Characters by Perrault","headers":["Name","Role/Relation"],"rows":[["Cinderella","Protagonist"],["Two Stepsisters",["Eldest","Jeering"],"Younger",["Less rude","Dismissive"]]]}%
+        """
+        let call = try XCTUnwrap(ToolCall.parse(response))
+        XCTAssertEqual(call.name, "create_spreadsheet")
+        XCTAssertEqual(call.arguments["path"]?.stringValue, "cinderella_cast.xlsx")
+        XCTAssertEqual(call.arguments["rows"]?.arrayValue?.count, 2)
+    }
 }
