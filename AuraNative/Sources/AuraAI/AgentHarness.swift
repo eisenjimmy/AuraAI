@@ -130,7 +130,7 @@ struct AgentHarness {
         list_files {"path":"."}; read_file {"path":"README.md"}; request_folder_access {"folder":"Downloads"}; write_file {"path":"notes.txt","content":"..."}.
         \(documentToolInstructions)
         run_shell {"command":"git status --short"}; computer {"action":"open_app|open_url|click|type|key","value":"...","x":0,"y":0}.
-        Use an enabled dedicated document tool when the user asks for Markdown, HTML, Excel, Word, or PowerPoint. Excel output must be a real .xlsx workbook, never CSV renamed to .xlsx.
+        Use an enabled dedicated document tool when the user asks for Markdown, HTML, Excel, Word, or PowerPoint. The document path is optional; Aura uses a safe filename based on the title when it is omitted. Excel output must be a real .xlsx workbook, never CSV renamed to .xlsx.
         Tool results are internal. Never show <tool_result>, tool JSON, or raw arrays to the user. Once work is complete, give a concise factual answer that names the exact folder inspected. Do not use fake excitement or claim success when access was declined. Follow the response-language instruction even if tool output is in another language.
         """
         var messages = [ModelMessage(role: "system", content: instructions)]
@@ -302,7 +302,7 @@ private enum AgentToolExecutor {
             return ToolExecution(output: "Wrote \(content.utf8.count) bytes to \(path).", grantedFolder: nil)
         case "create_markdown_document":
             guard skills.isEnabled(.markdown) else { return disabledSkill("Markdown") }
-            let path = try required("path", call.arguments)
+            let path = AgentArtifactPath.path(from: call.arguments, title: nil, fileExtension: "md")
             let content = try required("content", call.arguments)
             let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
             let allowed = await approval(AgentApproval(
@@ -315,8 +315,8 @@ private enum AgentToolExecutor {
             return ToolExecution(output: "Created Markdown document at \(path).", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "Markdown document")])
         case "create_html_document":
             guard skills.isEnabled(.html) else { return disabledSkill("HTML") }
-            let path = try required("path", call.arguments)
-            let title = try required("title", call.arguments)
+            let title = AgentArtifactPath.title(from: call.arguments, fallback: auraText("Aura report", "Aura 보고서"))
+            let path = AgentArtifactPath.path(from: call.arguments, title: title, fileExtension: "html")
             let summary = call.arguments["summary"]?.stringValue ?? ""
             let body = try required("body_html", call.arguments)
             let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
@@ -330,8 +330,8 @@ private enum AgentToolExecutor {
             return ToolExecution(output: "Created self-contained HTML document at \(path).", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "HTML document")])
         case "create_spreadsheet":
             guard skills.isEnabled(.spreadsheet) else { return disabledSkill("Excel") }
-            let path = try required("path", call.arguments)
-            let title = try required("title", call.arguments)
+            let title = AgentArtifactPath.title(from: call.arguments, fallback: auraText("Aura summary", "Aura 요약"))
+            let path = AgentArtifactPath.path(from: call.arguments, title: title, fileExtension: "xlsx")
             let sheet = call.arguments["sheet"]?.stringValue ?? "Summary"
             let headers = try requiredArray("headers", call.arguments).compactMap(\.stringValue)
             let rows = try requiredArray("rows", call.arguments).compactMap(\.arrayValue)
@@ -346,8 +346,8 @@ private enum AgentToolExecutor {
             return ToolExecution(output: "Created Excel workbook at \(path) with \(rows.count) data rows.", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "Excel workbook")])
         case "create_word_document":
             guard skills.isEnabled(.word) else { return disabledSkill("Word") }
-            let path = try required("path", call.arguments)
-            let title = try required("title", call.arguments)
+            let title = AgentArtifactPath.title(from: call.arguments, fallback: auraText("Aura document", "Aura 문서"))
+            let path = AgentArtifactPath.path(from: call.arguments, title: title, fileExtension: "docx")
             let content = try required("content", call.arguments)
             let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
             let allowed = await approval(AgentApproval(
@@ -360,8 +360,8 @@ private enum AgentToolExecutor {
             return ToolExecution(output: "Created Word document at \(path).", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "Word document")])
         case "create_presentation":
             guard skills.isEnabled(.presentation) else { return disabledSkill("PowerPoint") }
-            let path = try required("path", call.arguments)
-            let title = try required("title", call.arguments)
+            let title = AgentArtifactPath.title(from: call.arguments, fallback: auraText("Aura presentation", "Aura 프레젠테이션"))
+            let path = AgentArtifactPath.path(from: call.arguments, title: title, fileExtension: "pptx")
             let subtitle = call.arguments["subtitle"]?.stringValue ?? ""
             let slides = try presentationSlides(from: requiredArray("slides", call.arguments))
             let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
@@ -517,6 +517,27 @@ enum AgentPathResolver {
     private static func isContained(_ candidate: URL, by root: URL) -> Bool {
         let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
         return candidate.path == root.path || candidate.path.hasPrefix(rootPath)
+    }
+}
+
+enum AgentArtifactPath {
+    static func title(from values: [String: JSONValue], fallback: String) -> String {
+        let requested = values["title"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return requested.isEmpty ? fallback : requested
+    }
+
+    static func path(from values: [String: JSONValue], title: String?, fileExtension: String) -> String {
+        let requested = values["path"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard requested.isEmpty else {
+            return URL(fileURLWithPath: requested).pathExtension.isEmpty ? "\(requested).\(fileExtension)" : requested
+        }
+
+        let source = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        var stem = source.unicodeScalars.map { allowed.contains($0) ? String($0) : "-" }.joined()
+        while stem.contains("--") { stem = stem.replacingOccurrences(of: "--", with: "-") }
+        stem = stem.trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
+        return "\(stem.isEmpty ? "aura-document" : stem).\(fileExtension)"
     }
 }
 

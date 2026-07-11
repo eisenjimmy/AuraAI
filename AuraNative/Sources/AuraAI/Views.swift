@@ -131,7 +131,7 @@ struct OnboardingView: View {
                 Text(auraText("Before a cloud request, Aura can locally replace emails, phone numbers, card numbers, and likely API secrets with placeholders. You review every replacement. Local model requests never leave your Mac and are not filtered.", "클라우드 요청 전에 이메일, 전화번호, 카드번호, API 비밀값을 로컬에서 가리고 직접 확인할 수 있습니다. 로컬 모델 요청은 Mac을 떠나지 않습니다."))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Toggle("Review sensitive details before cloud requests", isOn: $store.settings.privacy.enabled)
+                Toggle(auraText("Review sensitive details before cloud requests", "클라우드 요청 전 민감 정보 검토"), isOn: $store.settings.privacy.enabled)
                     .toggleStyle(.switch)
             }
         default:
@@ -189,22 +189,22 @@ struct AuraWorkspaceView: View {
             if let member = store.selectedMember {
                 ChatView(member: member)
             } else {
-                ContentUnavailableView("Choose a teammate", systemImage: "person.2")
+                ContentUnavailableView(auraText("Choose a teammate", "친구를 선택하세요"), systemImage: "person.2")
             }
         }
         .navigationSplitViewStyle(.balanced)
         .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 420)
         .sheet(isPresented: $isShowingAddMember) { AddMemberSheet() }
         .sheet(isPresented: $store.isShowingSettings) { SettingsView() }
-        .sheet(isPresented: $store.isShowingGlobalMemory) { MemoryEditor(title: "Global memory", text: store.globalMemory) { store.saveGlobalMemory($0) } }
+        .sheet(isPresented: $store.isShowingGlobalMemory) { MemoryEditor(title: auraText("Global memory", "공통 기억"), text: store.globalMemory) { store.saveGlobalMemory($0) } }
         .sheet(item: $store.memoryMember) { member in
-            MemoryEditor(title: "What \(member.name) remembers", text: store.memberMemory(member)) { store.saveMemberMemory($0, member: member) }
+            MemoryEditor(title: auraText("What \(member.name) remembers", "\(member.name)이 기억하는 내용"), text: store.memberMemory(member)) { store.saveMemberMemory($0, member: member) }
         }
         .sheet(item: $store.editingMember) { member in FriendEditor(member: member) }
         .sheet(item: $store.pendingPrivacy) { review in PrivacyReviewSheet(review: review) }
         .sheet(item: $store.pendingApproval) { approval in AgentApprovalSheet(approval: approval) }
         .alert("Aura", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
-            Button("OK", role: .cancel) { store.errorMessage = nil }
+            Button(auraText("OK", "확인"), role: .cancel) { store.errorMessage = nil }
         } message: {
             Text(store.errorMessage ?? "")
         }
@@ -252,8 +252,8 @@ private struct FriendsSidebar: View {
             Spacer(minLength: 12)
             Divider()
             VStack(spacing: 4) {
-                SidebarAction(title: "Global memory", symbol: "brain.head.profile") { store.isShowingGlobalMemory = true }
-                SidebarAction(title: "Settings", symbol: "gearshape") { store.isShowingSettings = true }
+                SidebarAction(title: auraText("Global memory", "공통 기억"), symbol: "brain.head.profile") { store.isShowingGlobalMemory = true }
+                SidebarAction(title: auraText("Settings", "설정"), symbol: "gearshape") { store.isShowingSettings = true }
             }
             .padding(10)
         }
@@ -295,7 +295,7 @@ private struct FriendRow: View {
                 Text(member.role.title)
                     .font(.caption)
                     .foregroundStyle(isSelected ? Color.primary.opacity(0.72) : Color.secondary)
-                Text(isWorking ? "Typing..." : member.tagline)
+                Text(isWorking ? auraText("Typing...", "입력 중...") : member.tagline)
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
@@ -395,7 +395,7 @@ private struct ChatView: View {
                             HStack(spacing: 8) {
                                 TeamAvatar(member: member, size: 25)
                                 ProgressView().controlSize(.small)
-                                Text(store.settings.agentModeEnabled ? "Working through the task..." : "Thinking...")
+                                Text(store.settings.agentModeEnabled ? auraText("Working through the task...", "작업 진행 중...") : auraText("Thinking...", "생각 중..."))
                                     .foregroundStyle(.secondary)
                             }
                             .id("working")
@@ -435,7 +435,7 @@ private struct ChatView: View {
                     .disabled(store.isWorking || store.isExtractingAttachments)
                     .help(auraText("Attach image, PDF, Word, Excel, or text", "이미지, PDF, Word, Excel 또는 텍스트 첨부"))
 
-                    TextField("Message \(member.name)", text: $store.draft, axis: .vertical)
+                    TextField(auraText("Message \(member.name)", "\(member.name)에게 메시지"), text: $store.draft, axis: .vertical)
                         .textFieldStyle(.plain)
                         .lineLimit(1...10)
                         .frame(minHeight: 28, alignment: .center)
@@ -516,10 +516,16 @@ private struct MessageBubble: View {
         HStack(alignment: .top, spacing: 9) {
             if message.role == .assistant { TeamAvatar(member: member, size: 28) }
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 5) {
-                Text(message.role == .user ? "You" : message.role == .assistant ? member.name : "Aura tool")
+                Text(message.role == .user ? auraText("You", "나") : message.role == .assistant ? member.name : auraText("Aura tool", "Aura 도구"))
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
-                Text(message.content)
+                Group {
+                    if message.role == .assistant {
+                        MarkdownMessageView(content: message.content)
+                    } else {
+                        Text(message.content)
+                    }
+                }
                     .textSelection(.enabled)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
@@ -533,6 +539,150 @@ private struct MessageBubble: View {
             if message.role == .user { Spacer(minLength: 50) } else { Spacer() }
         }
         .frame(maxWidth: .infinity, alignment: message.role == .user ? .trailing : .leading)
+    }
+}
+
+private struct MarkdownMessageView: View {
+    private enum Block {
+        case heading(level: Int, text: String)
+        case paragraph(String)
+        case bullet(items: [String], ordered: Bool)
+        case code(String)
+        case divider
+    }
+
+    let content: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                blockView(block)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.leading)
+    }
+
+    @ViewBuilder
+    private func blockView(_ block: Block) -> some View {
+        switch block {
+        case .heading(let level, let text):
+            inlineText(text)
+                .font(level == 1 ? .title3.weight(.bold) : level == 2 ? .headline : .body.weight(.semibold))
+                .padding(.top, level == 1 ? 4 : 1)
+        case .paragraph(let text):
+            inlineText(text)
+                .fixedSize(horizontal: false, vertical: true)
+        case .bullet(let items, let ordered):
+            VStack(alignment: .leading, spacing: 5) {
+                ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                    HStack(alignment: .firstTextBaseline, spacing: 7) {
+                        Text(ordered ? "\(index + 1)." : "•")
+                            .foregroundStyle(.secondary)
+                            .frame(width: ordered ? 20 : 10, alignment: .trailing)
+                        inlineText(item)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        case .code(let code):
+            ScrollView(.horizontal, showsIndicators: false) {
+                Text(code)
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .padding(10)
+            }
+            .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 6))
+        case .divider:
+            Divider().padding(.vertical, 3)
+        }
+    }
+
+    private var blocks: [Block] {
+        let lines = content.components(separatedBy: .newlines)
+        var result: [Block] = []
+        var index = 0
+
+        while index < lines.count {
+            let line = lines[index]
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.isEmpty {
+                index += 1
+                continue
+            }
+            if trimmed.hasPrefix("```") {
+                var code: [String] = []
+                index += 1
+                while index < lines.count, !lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                    code.append(lines[index])
+                    index += 1
+                }
+                if index < lines.count { index += 1 }
+                result.append(.code(code.joined(separator: "\n")))
+                continue
+            }
+            if isDivider(trimmed) {
+                result.append(.divider)
+                index += 1
+                continue
+            }
+            if let heading = heading(from: trimmed) {
+                result.append(heading)
+                index += 1
+                continue
+            }
+            if let currentListItem = listItem(from: trimmed) {
+                var items = [currentListItem.text]
+                let ordered = currentListItem.ordered
+                index += 1
+                while index < lines.count, let next = listItem(from: lines[index].trimmingCharacters(in: .whitespaces)), next.ordered == ordered {
+                    items.append(next.text)
+                    index += 1
+                }
+                result.append(.bullet(items: items, ordered: ordered))
+                continue
+            }
+
+            var paragraph = [trimmed]
+            index += 1
+            while index < lines.count {
+                let next = lines[index].trimmingCharacters(in: .whitespaces)
+                guard !next.isEmpty, !next.hasPrefix("```"), !isDivider(next), heading(from: next) == nil, listItem(from: next) == nil else { break }
+                paragraph.append(next)
+                index += 1
+            }
+            result.append(.paragraph(paragraph.joined(separator: "\n")))
+        }
+        return result
+    }
+
+    private func inlineText(_ source: String) -> Text {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        if let attributed = try? AttributedString(markdown: source, options: options) {
+            return Text(attributed)
+        }
+        return Text(source)
+    }
+
+    private func heading(from line: String) -> Block? {
+        let level = line.prefix { $0 == "#" }.count
+        guard level > 0, level <= 6 else { return nil }
+        let text = line.dropFirst(level).trimmingCharacters(in: .whitespaces)
+        return text.isEmpty ? nil : .heading(level: level, text: text)
+    }
+
+    private func listItem(from line: String) -> (text: String, ordered: Bool)? {
+        if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
+            return (String(line.dropFirst(2)), false)
+        }
+        guard let range = line.range(of: #"^\d+\.\s+"#, options: .regularExpression) else { return nil }
+        return (String(line[range.upperBound...]), true)
+    }
+
+    private func isDivider(_ line: String) -> Bool {
+        let compact = line.replacingOccurrences(of: " ", with: "")
+        guard compact.count >= 3 else { return false }
+        return Set(compact).count == 1 && ["-", "*", "_"].contains(compact.first.map(String.init) ?? "")
     }
 }
 
@@ -607,7 +757,7 @@ struct SettingsView: View {
             FriendEditor(member: member)
         }
         .sheet(item: $memoryMember) { member in
-            MemoryEditor(title: "What \\(member.name) remembers", text: store.memberMemory(member)) {
+            MemoryEditor(title: auraText("What \(member.name) remembers", "\(member.name)이 기억하는 내용"), text: store.memberMemory(member)) {
                 store.saveMemberMemory($0, member: member)
             }
         }
@@ -635,11 +785,11 @@ struct SettingsView: View {
 
     private var privacyTab: some View {
         Form {
-            Toggle("Review before cloud requests", isOn: $store.settings.privacy.enabled)
-            Toggle("Emails", isOn: $store.settings.privacy.redactEmails)
-            Toggle("Phone numbers", isOn: $store.settings.privacy.redactPhones)
-            Toggle("Card numbers", isOn: $store.settings.privacy.redactCards)
-            Toggle("Likely API secrets", isOn: $store.settings.privacy.redactSecrets)
+            Toggle(auraText("Review before cloud requests", "클라우드 요청 전 검토"), isOn: $store.settings.privacy.enabled)
+            Toggle(auraText("Emails", "이메일"), isOn: $store.settings.privacy.redactEmails)
+            Toggle(auraText("Phone numbers", "전화번호"), isOn: $store.settings.privacy.redactPhones)
+            Toggle(auraText("Card numbers", "카드 번호"), isOn: $store.settings.privacy.redactCards)
+            Toggle(auraText("Likely API secrets", "추정 API 비밀값"), isOn: $store.settings.privacy.redactSecrets)
             Text(auraText("Aura redacts locally and shows a review sheet before sending a cloud request. The original values are restored only in the final response shown to you.", "Aura는 민감한 정보를 로컬에서 가린 뒤 클라우드 전송 전에 검토 화면을 보여줍니다. 원래 값은 화면에 표시되는 최종 답변에서만 복원됩니다."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -677,13 +827,14 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
             HStack {
-                Text(store.settings.workspacePath.isEmpty ? "No workspace selected" : store.settings.workspacePath)
+                Text(store.settings.workspacePath.isEmpty ? auraText("No write folder selected", "저장 폴더가 선택되지 않았습니다") : store.settings.workspacePath)
                     .lineLimit(1)
                     .foregroundStyle(store.settings.workspacePath.isEmpty ? .secondary : .primary)
                 Spacer()
-                Button(auraText("Choose workspace", "작업 폴더 선택")) { store.chooseWorkspace() }
+                Button(auraText("Use Documents/AuraAi", "문서/AuraAiKR 사용")) { store.useDefaultWorkspace() }
+                Button(auraText("Choose write folder", "저장 폴더 선택")) { store.chooseWorkspace() }
             }
-            Section("Read-only folder access") {
+            Section(auraText("Read-only folder access", "읽기 전용 폴더 접근")) {
                 Button(auraText("Allow another folder", "다른 폴더 허용")) { store.chooseAdditionalFolder() }
                 if store.settings.authorizedFolderPaths.isEmpty {
                     Text(auraText("No extra folders are available to agents.", "추가로 허용된 폴더가 없습니다."))
@@ -731,7 +882,7 @@ struct SettingsView: View {
                         ))
                         .labelsHidden()
                     }
-                    Label("Tool: \\(skill.toolName)", systemImage: "terminal")
+                    Label(auraText("Tool: \(skill.toolName)", "도구: \(skill.toolName)"), systemImage: "terminal")
                         .font(.caption2.monospaced())
                         .foregroundStyle(.tertiary)
                         .padding(.leading, 32)
@@ -843,7 +994,7 @@ private struct FriendEditor: View {
                             )) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Label(skill.title, systemImage: skill.symbol)
-                                    Text(auraText("Tool: \\(skill.toolName)", "도구: \\(skill.toolName)"))
+                                    Text(auraText("Tool: \(skill.toolName)", "도구: \(skill.toolName)"))
                                         .font(.caption2.monospaced())
                                         .foregroundStyle(.secondary)
                                 }
@@ -910,8 +1061,8 @@ private struct MemoryEditor: View {
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
             HStack {
                 Spacer()
-                Button("Cancel") { dismiss() }
-                Button("Save") { save(text); dismiss() }.buttonStyle(.borderedProminent)
+                Button(auraText("Cancel", "취소")) { dismiss() }
+                Button(auraText("Save", "저장")) { save(text); dismiss() }.buttonStyle(.borderedProminent)
             }
         }
         .padding(20)
@@ -925,9 +1076,9 @@ private struct PrivacyReviewSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("Review privacy replacements", systemImage: "hand.raised.fill")
+            Label(auraText("Review privacy replacements", "개인정보 가림 검토"), systemImage: "hand.raised.fill")
                 .font(.title2.weight(.semibold))
-            Text("This is the redacted version that will be sent to your cloud provider. Nothing is sent until you approve.")
+            Text(auraText("This is the redacted version that will be sent to your cloud provider. Nothing is sent until you approve.", "클라우드 제공자에게 전송될 가림 처리본입니다. 승인하기 전에는 아무것도 전송되지 않습니다."))
                 .foregroundStyle(.secondary)
             List(review.matches) { match in
                 HStack {
@@ -943,9 +1094,9 @@ private struct PrivacyReviewSheet: View {
             .padding(10)
             .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
             HStack {
-                Button("Cancel", role: .cancel) { store.cancelPrivacy() }
+                Button(auraText("Cancel", "취소"), role: .cancel) { store.cancelPrivacy() }
                 Spacer()
-                Button("Send redacted") { store.approvePrivacy() }.buttonStyle(.borderedProminent)
+                Button(auraText("Send redacted", "가림 처리본 보내기")) { store.approvePrivacy() }.buttonStyle(.borderedProminent)
             }
         }
         .padding(22)
@@ -959,7 +1110,7 @@ private struct AgentApprovalSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label(approval.kind.rawValue, systemImage: "exclamationmark.shield.fill")
+            Label(approval.kind.title, systemImage: "exclamationmark.shield.fill")
                 .font(.title2.weight(.semibold))
             Text(approval.title).font(.headline)
             ScrollView {
@@ -971,9 +1122,9 @@ private struct AgentApprovalSheet: View {
             .padding(10)
             .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 7))
             HStack {
-                Button("Decline", role: .cancel) { store.resolveApproval(false) }
+                Button(auraText("Decline", "거절"), role: .cancel) { store.resolveApproval(false) }
                 Spacer()
-                Button("Allow once") { store.resolveApproval(true) }.buttonStyle(.borderedProminent)
+                Button(auraText("Allow once", "한 번 허용")) { store.resolveApproval(true) }.buttonStyle(.borderedProminent)
             }
         }
         .padding(22)

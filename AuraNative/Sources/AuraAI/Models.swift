@@ -28,6 +28,17 @@ enum AuraEdition: String, Codable {
     }
 }
 
+enum AuraWriteFolder {
+    static var name: String { AuraEdition.current == .korean ? "AuraAiKR" : "AuraAi" }
+
+    static var url: URL {
+        let fileManager = FileManager.default
+        let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first
+            ?? fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Documents", isDirectory: true)
+        return documents.appendingPathComponent(name, isDirectory: true)
+    }
+}
+
 enum ProviderKind: String, Codable, CaseIterable, Identifiable {
     case local
     case openAI
@@ -537,6 +548,15 @@ enum AgentApprovalKind: String {
     case writeFile = "Write file"
     case shell = "Run command"
     case computer = "Control Mac"
+
+    var title: String {
+        switch self {
+        case .folderAccess: return auraText("Allow folder access", "폴더 접근 허용")
+        case .writeFile: return auraText("Write file", "파일 작성")
+        case .shell: return auraText("Run command", "명령 실행")
+        case .computer: return auraText("Control Mac", "Mac 제어")
+        }
+    }
 }
 
 struct AgentApproval: Identifiable {

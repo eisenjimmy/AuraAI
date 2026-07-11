@@ -28,7 +28,14 @@ final class AuraStore: ObservableObject {
     private var privacyAttachments: [ChatAttachment] = []
 
     init() {
-        settings = persistence.loadSettings()
+        var loadedSettings = persistence.loadSettings()
+        if loadedSettings.workspacePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let defaultWorkspace = AuraWriteFolder.url
+            try? FileManager.default.createDirectory(at: defaultWorkspace, withIntermediateDirectories: true)
+            loadedSettings.workspacePath = defaultWorkspace.path
+            persistence.saveSettings(loadedSettings)
+        }
+        settings = loadedSettings
         members = persistence.loadMembers()
         selectedMemberID = members.first?.id
         loadConversation()
@@ -102,8 +109,15 @@ final class AuraStore: ObservableObject {
         }
     }
 
+    func useDefaultWorkspace() {
+        let defaultWorkspace = AuraWriteFolder.url
+        try? FileManager.default.createDirectory(at: defaultWorkspace, withIntermediateDirectories: true)
+        settings.workspacePath = defaultWorkspace.path
+        saveSettings()
+    }
+
     func chooseAdditionalFolder() {
-        let panel = configuredFolderPanel(title: "Allow agent to read a folder")
+        let panel = configuredFolderPanel(title: auraText("Allow agent to read a folder", "에이전트 읽기 폴더 허용"))
         guard panel.runModal() == .OK, let url = panel.url else { return }
         addAuthorizedFolder(url)
     }

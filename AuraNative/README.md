@@ -12,6 +12,8 @@ a permissioned agent harness for practical document work.
 - Supported ingestion includes images, PDF, DOCX, XLSX, RTF, CSV, Markdown,
   HTML, JSON, and plain text.
 - Apple Vision performs offline OCR for images and scanned PDF pages.
+- Assistant messages render Markdown headings, emphasis, lists, rules, and
+  fenced code blocks as native chat content.
 - Approved tools create real XLSX workbooks, editable Word documents, real
   PowerPoint presentations, self-contained HTML reports, and Markdown documents
   inside the selected workspace. Each appears as a clickable attachment below
@@ -20,6 +22,9 @@ a permissioned agent harness for practical document work.
   the whole team, including the purpose and backing tool name for each skill.
   Friend Editor applies an additional per-friend skill allowance. A tool is
   exposed only when both the global and friend-level settings are enabled.
+- Aura creates `Documents/AuraAi` by default (`Documents/AuraAiKR` in the Korean
+  edition) for tool-generated files. Settings can replace or restore that write
+  folder. Omitted document paths fall back to a safe title-derived filename.
 - Right-clicking a friend opens memory or a Friend Editor for bundled template
   portraits, custom photo upload, specialty, tagline, and personality.
 - The Korean edition reuses its full Korean persona prompts from the Electron

@@ -24,4 +24,17 @@ final class ToolCallTests: XCTestCase {
         XCTAssertEqual(call.arguments["path"]?.stringValue, "cinderella_cast.xlsx")
         XCTAssertEqual(call.arguments["rows"]?.arrayValue?.count, 2)
     }
+
+    func testArtifactPathDefaultsFromTitleWhenToolOmitsPath() {
+        let path = AgentArtifactPath.path(from: [:], title: "Cinderella Characters", fileExtension: "xlsx")
+        XCTAssertEqual(path, "Cinderella-Characters.xlsx")
+    }
+
+    func testArtifactPathUsesSafeFallbackForBlankPathAndTitle() {
+        let values: [String: JSONValue] = ["path": .string("   "), "title": .string("   ")]
+        let title = AgentArtifactPath.title(from: values, fallback: "Aura summary")
+        let path = AgentArtifactPath.path(from: values, title: title, fileExtension: "xlsx")
+        XCTAssertEqual(title, "Aura summary")
+        XCTAssertEqual(path, "Aura-summary.xlsx")
+    }
 }

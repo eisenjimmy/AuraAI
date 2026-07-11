@@ -5,7 +5,7 @@ enum AuraStoreError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidWorkspace: return "Choose a workspace folder before enabling code tools."
+        case .invalidWorkspace: return auraText("Choose a write folder before enabling tools.", "도구를 사용하기 전에 저장 폴더를 선택하세요.")
         }
     }
 }
