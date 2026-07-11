@@ -574,6 +574,8 @@ struct SettingsView: View {
     @EnvironmentObject private var store: AuraStore
     @Environment(\.dismiss) private var dismiss
     @State private var selectedTab = "Connection"
+    @State private var editingMember: TeamMember?
+    @State private var memoryMember: TeamMember?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -595,11 +597,20 @@ struct SettingsView: View {
                 connectionTab.tabItem { Label(auraText("Connection", "연결"), systemImage: "cpu") }.tag("Connection")
                 privacyTab.tabItem { Label(auraText("Privacy", "개인정보"), systemImage: "hand.raised") }.tag("Privacy")
                 teamTab.tabItem { Label(auraText("Friends", "친구"), systemImage: "person.3") }.tag("Team")
+                skillsTab.tabItem { Label(auraText("Skills", "기술"), systemImage: "wand.and.stars") }.tag("Skills")
                 harnessTab.tabItem { Label(auraText("Tools", "도구"), systemImage: "hammer") }.tag("Harness")
             }
             .padding(18)
         }
         .frame(width: 720, height: 600)
+        .sheet(item: $editingMember) { member in
+            FriendEditor(member: member)
+        }
+        .sheet(item: $memoryMember) { member in
+            MemoryEditor(title: "What \\(member.name) remembers", text: store.memberMemory(member)) {
+                store.saveMemberMemory($0, member: member)
+            }
+        }
         .onDisappear { store.saveSettings() }
     }
 
@@ -640,7 +651,7 @@ struct SettingsView: View {
         List {
             ForEach(store.members) { member in
                 HStack {
-                    Button { store.editingMember = member } label: { TeamAvatar(member: member, size: 30) }
+                    Button { editingMember = member } label: { TeamAvatar(member: member, size: 30) }
                         .buttonStyle(.plain)
                         .help(auraText("Edit friend", "친구 편집"))
                     VStack(alignment: .leading) {
@@ -648,9 +659,9 @@ struct SettingsView: View {
                         Text(member.role.title).font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button(auraText("Edit", "편집")) { store.editingMember = member }
+                    Button(auraText("Edit", "편집")) { editingMember = member }
                         .buttonStyle(.bordered)
-                    Button(auraText("Memory", "기억")) { store.memoryMember = member }
+                    Button(auraText("Memory", "기억")) { memoryMember = member }
                         .buttonStyle(.bordered)
                 }
             }
@@ -661,17 +672,9 @@ struct SettingsView: View {
         Form {
             Section(auraText("Work tools", "작업 도구")) {
                 Toggle(auraText("Allow friends to use tools", "친구의 도구 사용 허용"), isOn: $store.settings.agentModeEnabled)
-                Text(auraText("When enabled, friends can inspect approved folders and create documents using the skills below. Every write or command still asks for approval.", "켜면 친구가 허용된 폴더를 확인하고 아래 기술로 문서를 만들 수 있습니다. 파일 쓰기와 명령 실행은 매번 승인을 요청합니다."))
+                Text(auraText("When enabled, friends can inspect approved folders and use the globally enabled skills. Every write or command still asks for approval.", "켜면 친구가 허용된 폴더를 확인하고 전역으로 켠 기술을 사용할 수 있습니다. 파일 쓰기와 명령 실행은 매번 승인을 요청합니다."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-            Section(auraText("Document skills", "문서 기술")) {
-                ForEach(AgentSkill.allCases) { skill in
-                    Toggle(skill.title, isOn: Binding(
-                        get: { store.skillSettings.isEnabled(skill) },
-                        set: { store.setSkillEnabled($0, for: skill) }
-                    ))
-                }
             }
             HStack {
                 Text(store.settings.workspacePath.isEmpty ? "No workspace selected" : store.settings.workspacePath)
@@ -700,6 +703,42 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
+    }
+
+    private var skillsTab: some View {
+        List {
+            Section {
+                Text(auraText("Skills are the document-making capabilities available to the whole team. A friend can only use a skill when it is enabled here and in that friend's editor.", "기술은 팀 전체에 제공되는 문서 생성 기능입니다. 여기와 각 친구 편집 화면에서 모두 켜져야 친구가 사용할 수 있습니다."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(AgentSkill.allCases) { skill in
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: skill.symbol)
+                            .frame(width: 22)
+                            .foregroundStyle(Color.accentColor)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(skill.title).font(.headline)
+                            Text(skill.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 8)
+                        Toggle("", isOn: Binding(
+                            get: { store.skillSettings.isEnabled(skill) },
+                            set: { store.setSkillEnabled($0, for: skill) }
+                        ))
+                        .labelsHidden()
+                    }
+                    Label("Tool: \\(skill.toolName)", systemImage: "terminal")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, 32)
+                }
+                .padding(.vertical, 6)
+            }
+        }
     }
 }
 
@@ -789,6 +828,28 @@ private struct FriendEditor: View {
                             .padding(8)
                             .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(auraText("Skills", "기술"))
+                            .font(.headline)
+                        Text(auraText("This friend can use only the skills enabled here and in Settings. File creation still requires your approval.", "이 친구는 여기와 설정에서 모두 켠 기술만 사용할 수 있습니다. 파일 생성 전에는 여전히 승인을 요청합니다."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        ForEach(AgentSkill.allCases) { skill in
+                            Toggle(isOn: Binding(
+                                get: { draft.isSkillEnabled(skill) },
+                                set: { draft.setSkillEnabled($0, for: skill) }
+                            )) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Label(skill.title, systemImage: skill.symbol)
+                                    Text(auraText("Tool: \\(skill.toolName)", "도구: \\(skill.toolName)"))
+                                        .font(.caption2.monospaced())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .toggleStyle(.switch)
+                        }
                     }
                 }
                 .padding(.horizontal, 24)

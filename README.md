@@ -255,11 +255,11 @@ Network traffic goes only to:
 - Friends with tools enabled can create real styled `.xlsx` workbooks, editable Word (`.docx`) documents, PowerPoint (`.pptx`) presentations, self-contained HTML reports, and Markdown documents inside the selected workspace. Every artifact write is previewed for approval.
 - Generated documents appear as clickable file attachments on the friend’s reply. Aura accepts both the documented tool-call JSON envelope and the flat JSON form produced by some local models, including recoverable replies that omit a closing tool tag.
 
-The agent harness switch lives only in **Settings > Tools**. The same panel provides independent **Document skills** toggles for Markdown, HTML, Excel, Word, and PowerPoint. Turning a skill off removes it from the model's available tools and blocks it at execution time. Chat stays focused on the friend and the work; tool permissions are configured once rather than repeated in every conversation.
+The agent harness switch lives only in **Settings > Tools**. **Settings > Skills** is the team-wide control plane for Markdown, HTML, Excel, Word, and PowerPoint; every skill explains its purpose and the underlying tool it exposes. Each Friend Editor has a separate Skills section, so a friend can use only the skills enabled globally and for that individual. Turning either level off removes the tool from that friend's model prompt and blocks it at execution time. Chat stays focused on the friend and the work; tool permissions are configured once rather than repeated in every conversation.
 
 Settings uses a stable 720 x 600 layout so switching tabs does not resize or recenter the modal. Settings and Add Friend both include explicit close buttons.
 
-Right-click any friend in the sidebar and choose **Edit friend** to open the native Friend Editor. It can restore any bundled template portrait, import a custom photo, and configure the friend's name, specialty, tagline, and personality instructions. **Open memory** remains available from the same context menu.
+Right-click any friend in the sidebar and choose **Edit friend** to open the native Friend Editor. It can restore any bundled template portrait, import a custom photo, and configure the friend's name, specialty, tagline, personality instructions, and allowed skills. **Open memory** remains available from the same context menu. Editing or opening memory from **Settings > Friends** opens immediately above Settings rather than waiting for Settings to close.
 
 The Korean edition reuses the established Korean personality prompts from the Electron app, and enforces Korean replies for normal chat and tool-assisted work unless a user explicitly requests another language.
 

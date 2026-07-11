@@ -16,9 +16,10 @@ a permissioned agent harness for practical document work.
   PowerPoint presentations, self-contained HTML reports, and Markdown documents
   inside the selected workspace. Each appears as a clickable attachment below
   the friend's reply.
-- **Settings > Tools > Document skills** independently enables Markdown, HTML,
-  Excel, Word, and PowerPoint. Disabled skills are removed from the model prompt
-  and rejected by the tool executor.
+- **Settings > Skills** manages Markdown, HTML, Excel, Word, and PowerPoint for
+  the whole team, including the purpose and backing tool name for each skill.
+  Friend Editor applies an additional per-friend skill allowance. A tool is
+  exposed only when both the global and friend-level settings are enabled.
 - Right-clicking a friend opens memory or a Friend Editor for bundled template
   portraits, custom photo upload, specialty, tagline, and personality.
 - The Korean edition reuses its full Korean persona prompts from the Electron

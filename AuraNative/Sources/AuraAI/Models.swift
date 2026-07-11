@@ -92,6 +92,31 @@ enum AgentSkill: String, Codable, CaseIterable, Identifiable {
         case .presentation: return "create_presentation"
         }
     }
+
+    var summary: String {
+        switch self {
+        case .markdown:
+            return auraText("Creates a portable plain-text document with headings and lists.", "제목과 목록을 갖춘 휴대 가능한 텍스트 문서를 만듭니다.")
+        case .html:
+            return auraText("Creates a self-contained HTML report that opens in a browser.", "브라우저에서 열 수 있는 독립 실행형 HTML 보고서를 만듭니다.")
+        case .spreadsheet:
+            return auraText("Creates a styled, editable Excel workbook.", "서식이 적용된 편집 가능한 Excel 워크북을 만듭니다.")
+        case .word:
+            return auraText("Creates an editable Word document with headings and bullets.", "제목과 글머리표를 갖춘 편집 가능한 Word 문서를 만듭니다.")
+        case .presentation:
+            return auraText("Creates an editable PowerPoint deck with a title slide and content slides.", "제목 슬라이드와 내용 슬라이드가 있는 편집 가능한 PowerPoint를 만듭니다.")
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .markdown: return "text.document"
+        case .html: return "chevron.left.forwardslash.chevron.right"
+        case .spreadsheet: return "tablecells"
+        case .word: return "doc.richtext"
+        case .presentation: return "rectangle.on.rectangle.angled"
+        }
+    }
 }
 
 struct AgentSkillSettings: Codable, Equatable {
@@ -119,6 +144,14 @@ struct AgentSkillSettings: Codable, Equatable {
         case .word: word = enabled
         case .presentation: presentation = enabled
         }
+    }
+
+    func limited(to member: TeamMember) -> AgentSkillSettings {
+        var result = self
+        for skill in AgentSkill.allCases where !member.isSkillEnabled(skill) {
+            result.setEnabled(false, for: skill)
+        }
+        return result
     }
 }
 
@@ -210,11 +243,27 @@ struct TeamMember: Identifiable, Codable, Equatable {
     var avatarAsset: String?
     var customInstructions: String
     var createdAt: Date
+    /// Nil preserves the all-skills-enabled default for existing friends.
+    var enabledSkillIDs: [String]?
 
     var systemPrompt: String {
         [role.instructions, customInstructions.trimmingCharacters(in: .whitespacesAndNewlines)]
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
+    }
+
+    func isSkillEnabled(_ skill: AgentSkill) -> Bool {
+        enabledSkillIDs?.contains(skill.rawValue) ?? true
+    }
+
+    mutating func setSkillEnabled(_ enabled: Bool, for skill: AgentSkill) {
+        var identifiers = Set(enabledSkillIDs ?? AgentSkill.allCases.map(\.rawValue))
+        if enabled {
+            identifiers.insert(skill.rawValue)
+        } else {
+            identifiers.remove(skill.rawValue)
+        }
+        enabledSkillIDs = AgentSkill.allCases.map(\.rawValue).filter(identifiers.contains)
     }
 }
 

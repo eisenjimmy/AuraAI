@@ -36,6 +36,7 @@ final class AuraStore: ObservableObject {
 
     var selectedMember: TeamMember? { members.first { $0.id == selectedMemberID } }
     var skillSettings: AgentSkillSettings { settings.skillSettings ?? AgentSkillSettings() }
+    func effectiveSkills(for member: TeamMember) -> AgentSkillSettings { skillSettings.limited(to: member) }
 
     var globalMemory: String { persistence.globalMemory() }
 
@@ -256,7 +257,7 @@ final class AuraStore: ObservableObject {
         let workspace = settings.workspacePath.isEmpty ? nil : URL(fileURLWithPath: settings.workspacePath)
         let authorizedFolders = settings.authorizedFolderPaths.map { URL(fileURLWithPath: $0) }
         let agentMode = settings.agentModeEnabled
-        let skills = skillSettings
+        let skills = effectiveSkills(for: member)
 
         Task {
             do {

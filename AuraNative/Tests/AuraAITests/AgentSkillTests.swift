@@ -14,4 +14,22 @@ final class AgentSkillTests: XCTestCase {
         XCTAssertTrue(settings.isEnabled(.word))
         XCTAssertEqual(AgentSkill.word.toolName, "create_word_document")
     }
+
+    func testFriendSkillDefaultsToEnabled() {
+        let member = TeamMember.defaults[0]
+        XCTAssertTrue(AgentSkill.allCases.allSatisfy(member.isSkillEnabled))
+    }
+
+    func testFriendSkillsCannotExpandGlobalSkills() {
+        var global = AgentSkillSettings()
+        global.setEnabled(false, for: .presentation)
+        var member = TeamMember.defaults[0]
+        member.setSkillEnabled(false, for: .word)
+
+        let effective = global.limited(to: member)
+
+        XCTAssertFalse(effective.isEnabled(.presentation))
+        XCTAssertFalse(effective.isEnabled(.word))
+        XCTAssertTrue(effective.isEnabled(.spreadsheet))
+    }
 }
