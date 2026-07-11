@@ -18,6 +18,7 @@ struct AgentHarness {
         memberMemory: String,
         workspace: URL?,
         authorizedFolders: [URL],
+        skills: AgentSkillSettings,
         requestFolder: @escaping @MainActor (String) async -> URL?,
         approval: @escaping @MainActor (AgentApproval) async -> Bool
     ) async throws -> AgentRunResult {
@@ -50,6 +51,7 @@ struct AgentHarness {
             memberMemory: memberMemory,
             workspace: workspace,
             authorizedFolders: readableFolders,
+            skills: skills,
             requiredFolder: requestedFolder
         )
         if let initialFolderResult {
@@ -65,6 +67,7 @@ struct AgentHarness {
                 call,
                 workspace: workspace,
                 authorizedFolders: readableFolders,
+                skills: skills,
                 requestFolder: requestFolder,
                 approval: approval
             )
@@ -89,6 +92,7 @@ struct AgentHarness {
         memberMemory: String,
         workspace: URL?,
         authorizedFolders: [URL],
+        skills: AgentSkillSettings,
         requiredFolder: String?
     ) -> [ModelMessage] {
         let workspaceDescription = workspace?.path ?? "No workspace selected. Do not request file or shell tools."
@@ -98,6 +102,17 @@ struct AgentHarness {
         let targetInstruction = requiredFolder.map {
             "The current request explicitly targets the approved \($0) folder. Report only what the internal folder result confirms."
         } ?? ""
+        let enabledDocumentTools = AgentSkill.allCases.filter(skills.isEnabled).map(\.toolName)
+        let toolNames = (["list_files", "read_file", "request_folder_access", "write_file"] + enabledDocumentTools + ["run_shell", "computer"]).joined(separator: "|")
+        let documentToolInstructions = enabledDocumentTools.isEmpty
+            ? "Document creation skills are disabled. Do not call a document creation tool."
+            : [
+                skills.isEnabled(.markdown) ? "create_markdown_document {\"path\":\"report.md\",\"content\":\"# Report\\n...\"}." : nil,
+                skills.isEnabled(.html) ? "create_html_document {\"path\":\"report.html\",\"title\":\"Report\",\"summary\":\"One-line summary\",\"body_html\":\"<section><h2>Findings</h2><p>...</p></section>\"}." : nil,
+                skills.isEnabled(.spreadsheet) ? "create_spreadsheet {\"path\":\"report.xlsx\",\"sheet\":\"Summary\",\"title\":\"Report\",\"headers\":[\"Item\",\"Amount\"],\"rows\":[[\"Example\",1250],[\"Active\",true]]}." : nil,
+                skills.isEnabled(.word) ? "create_word_document {\"path\":\"brief.docx\",\"title\":\"Project Brief\",\"content\":\"## Decision\\nParagraph text\\n- First action\"}." : nil,
+                skills.isEnabled(.presentation) ? "create_presentation {\"path\":\"brief.pptx\",\"title\":\"Project Brief\",\"subtitle\":\"Prepared by Aura\",\"slides\":[{\"title\":\"Decision\",\"body\":\"One concise point\",\"bullets\":[\"Action one\",\"Action two\"]}]}." : nil
+            ].compactMap { $0 }.joined(separator: "\n")
         let instructions = """
         \(AuraEdition.current.responseLanguageInstruction)
 
@@ -110,14 +125,12 @@ struct AgentHarness {
         File writes and shell commands remain limited to the selected workspace. Computer control requires visible user approval. Never claim you saw, read, or changed anything unless a tool result confirms the exact target.
 
         To use one tool, reply with only:
-        <tool_call>{"name":"list_files|read_file|request_folder_access|write_file|create_markdown_document|create_html_document|create_spreadsheet|run_shell|computer","arguments":{...}}</tool_call>
+        <tool_call>{"name":"\(toolNames)","arguments":{...}}</tool_call>
         Supported arguments:
         list_files {"path":"."}; read_file {"path":"README.md"}; request_folder_access {"folder":"Downloads"}; write_file {"path":"notes.txt","content":"..."}.
-        create_markdown_document {"path":"report.md","content":"# Report\n..."}.
-        create_html_document {"path":"report.html","title":"Report","summary":"One-line summary","body_html":"<section><h2>Findings</h2><p>...</p></section>"}.
-        create_spreadsheet {"path":"report.xlsx","sheet":"Summary","title":"Report","headers":["Item","Amount"],"rows":[["Example",1250],["Active",true]]}.
+        \(documentToolInstructions)
         run_shell {"command":"git status --short"}; computer {"action":"open_app|open_url|click|type|key","value":"...","x":0,"y":0}.
-        Use the dedicated document tools when the user asks for Markdown, HTML, or Excel. Excel output must be a real .xlsx workbook, never CSV renamed to .xlsx.
+        Use an enabled dedicated document tool when the user asks for Markdown, HTML, Excel, Word, or PowerPoint. Excel output must be a real .xlsx workbook, never CSV renamed to .xlsx.
         Tool results are internal. Never show <tool_result>, tool JSON, or raw arrays to the user. Once work is complete, give a concise factual answer that names the exact folder inspected. Do not use fake excitement or claim success when access was declined. Follow the response-language instruction even if tool output is in another language.
         """
         var messages = [ModelMessage(role: "system", content: instructions)]
@@ -233,6 +246,7 @@ enum JSONValue: Decodable {
     var stringValue: String? { if case .string(let value) = self { return value } else { return nil } }
     var intValue: Int? { if case .number(let value) = self { return Int(value) } else { return nil } }
     var arrayValue: [JSONValue]? { if case .array(let value) = self { return value } else { return nil } }
+    var objectValue: [String: JSONValue]? { if case .object(let value) = self { return value } else { return nil } }
 }
 
 private struct ToolExecution {
@@ -246,6 +260,7 @@ private enum AgentToolExecutor {
         _ call: ToolCall,
         workspace: URL?,
         authorizedFolders: [URL],
+        skills: AgentSkillSettings,
         requestFolder: @escaping @MainActor (String) async -> URL?,
         approval: @escaping @MainActor (AgentApproval) async -> Bool
     ) async throws -> ToolExecution {
@@ -286,6 +301,7 @@ private enum AgentToolExecutor {
             try content.write(to: file, atomically: true, encoding: .utf8)
             return ToolExecution(output: "Wrote \(content.utf8.count) bytes to \(path).", grantedFolder: nil)
         case "create_markdown_document":
+            guard skills.isEnabled(.markdown) else { return disabledSkill("Markdown") }
             let path = try required("path", call.arguments)
             let content = try required("content", call.arguments)
             let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
@@ -298,6 +314,7 @@ private enum AgentToolExecutor {
             try ArtifactWriter.markdown(content: content, to: file)
             return ToolExecution(output: "Created Markdown document at \(path).", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "Markdown document")])
         case "create_html_document":
+            guard skills.isEnabled(.html) else { return disabledSkill("HTML") }
             let path = try required("path", call.arguments)
             let title = try required("title", call.arguments)
             let summary = call.arguments["summary"]?.stringValue ?? ""
@@ -312,6 +329,7 @@ private enum AgentToolExecutor {
             try ArtifactWriter.html(title: title, summary: summary, bodyHTML: body, to: file)
             return ToolExecution(output: "Created self-contained HTML document at \(path).", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "HTML document")])
         case "create_spreadsheet":
+            guard skills.isEnabled(.spreadsheet) else { return disabledSkill("Excel") }
             let path = try required("path", call.arguments)
             let title = try required("title", call.arguments)
             let sheet = call.arguments["sheet"]?.stringValue ?? "Summary"
@@ -326,6 +344,36 @@ private enum AgentToolExecutor {
             guard allowed else { return ToolExecution(output: "User declined the Excel workbook write.", grantedFolder: nil) }
             try ArtifactWriter.spreadsheet(title: title, sheetName: sheet, headers: headers, rows: rows, to: file)
             return ToolExecution(output: "Created Excel workbook at \(path) with \(rows.count) data rows.", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "Excel workbook")])
+        case "create_word_document":
+            guard skills.isEnabled(.word) else { return disabledSkill("Word") }
+            let path = try required("path", call.arguments)
+            let title = try required("title", call.arguments)
+            let content = try required("content", call.arguments)
+            let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
+            let allowed = await approval(AgentApproval(
+                kind: .writeFile,
+                title: "Create \(file.lastPathComponent)",
+                detail: "\(title)\n\n\(String(content.prefix(1_000)))"
+            ))
+            guard allowed else { return ToolExecution(output: "User declined the Word document write.", grantedFolder: nil) }
+            try ArtifactWriter.word(title: title, content: content, to: file)
+            return ToolExecution(output: "Created Word document at \(path).", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "Word document")])
+        case "create_presentation":
+            guard skills.isEnabled(.presentation) else { return disabledSkill("PowerPoint") }
+            let path = try required("path", call.arguments)
+            let title = try required("title", call.arguments)
+            let subtitle = call.arguments["subtitle"]?.stringValue ?? ""
+            let slides = try presentationSlides(from: requiredArray("slides", call.arguments))
+            let file = try AgentPathResolver.resolveWorkspace(path, workspace: workspace)
+            let preview = slides.prefix(8).map { $0.title }.joined(separator: "\n")
+            let allowed = await approval(AgentApproval(
+                kind: .writeFile,
+                title: "Create \(file.lastPathComponent)",
+                detail: "\(title)\n\n\(preview)"
+            ))
+            guard allowed else { return ToolExecution(output: "User declined the PowerPoint write.", grantedFolder: nil) }
+            try ArtifactWriter.presentation(title: title, subtitle: subtitle, slides: slides, to: file)
+            return ToolExecution(output: "Created PowerPoint presentation at \(path) with \(slides.count + 1) slides.", grantedFolder: nil, attachments: [generatedAttachment(file, kind: "PowerPoint presentation")])
         case "run_shell":
             let command = try required("command", call.arguments)
             let root = try AgentPathResolver.workspaceRoot(workspace)
@@ -362,11 +410,34 @@ private enum AgentToolExecutor {
         )
     }
 
+    private static func disabledSkill(_ name: String) -> ToolExecution {
+        ToolExecution(output: "The \(name) document skill is disabled in Aura Settings. Do not claim the file was created.", grantedFolder: nil)
+    }
+
     private static func requiredArray(_ key: String, _ values: [String: JSONValue]) throws -> [JSONValue] {
         guard let value = values[key]?.arrayValue else {
             throw LLMClientError.badResponse("Tool requires a \(key) array.")
         }
         return value
+    }
+
+    private static func presentationSlides(from values: [JSONValue]) throws -> [PresentationSlide] {
+        let slides = try values.map { value -> PresentationSlide in
+            guard let object = value.objectValue,
+                  let title = object["title"]?.stringValue,
+                  !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw LLMClientError.badResponse("Each presentation slide requires a title.")
+            }
+            return PresentationSlide(
+                title: title,
+                body: object["body"]?.stringValue ?? "",
+                bullets: object["bullets"]?.arrayValue?.compactMap(\.stringValue) ?? []
+            )
+        }
+        guard !slides.isEmpty, slides.count <= 30 else {
+            throw LLMClientError.badResponse("Presentation requires 1 to 30 slides.")
+        }
+        return slides
     }
 
     static func listDirectory(_ directory: URL) throws -> String {

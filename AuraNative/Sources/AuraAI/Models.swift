@@ -65,6 +65,63 @@ struct PrivacySettings: Codable, Equatable {
     var customPatterns: [String] = []
 }
 
+enum AgentSkill: String, Codable, CaseIterable, Identifiable {
+    case markdown
+    case html
+    case spreadsheet
+    case word
+    case presentation
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .markdown: return "Markdown"
+        case .html: return "HTML"
+        case .spreadsheet: return auraText("Excel workbook", "Excel 워크북")
+        case .word: return auraText("Word document", "Word 문서")
+        case .presentation: return auraText("PowerPoint", "PowerPoint")
+        }
+    }
+
+    var toolName: String {
+        switch self {
+        case .markdown: return "create_markdown_document"
+        case .html: return "create_html_document"
+        case .spreadsheet: return "create_spreadsheet"
+        case .word: return "create_word_document"
+        case .presentation: return "create_presentation"
+        }
+    }
+}
+
+struct AgentSkillSettings: Codable, Equatable {
+    var markdown = true
+    var html = true
+    var spreadsheet = true
+    var word = true
+    var presentation = true
+
+    func isEnabled(_ skill: AgentSkill) -> Bool {
+        switch skill {
+        case .markdown: return markdown
+        case .html: return html
+        case .spreadsheet: return spreadsheet
+        case .word: return word
+        case .presentation: return presentation
+        }
+    }
+
+    mutating func setEnabled(_ enabled: Bool, for skill: AgentSkill) {
+        switch skill {
+        case .markdown: markdown = enabled
+        case .html: html = enabled
+        case .spreadsheet: spreadsheet = enabled
+        case .word: word = enabled
+        case .presentation: presentation = enabled
+        }
+    }
+}
+
 struct AuraSettings: Codable, Equatable {
     var onboarded = false
     var userName = ""
@@ -74,6 +131,8 @@ struct AuraSettings: Codable, Equatable {
     /// Read-only folders the user explicitly selected for the agent harness.
     var authorizedFolderPaths: [String] = []
     var agentModeEnabled = false
+    /// Optional for backward-compatible decoding of earlier settings files.
+    var skillSettings: AgentSkillSettings?
 }
 
 enum TeamRole: String, Codable, CaseIterable, Identifiable {

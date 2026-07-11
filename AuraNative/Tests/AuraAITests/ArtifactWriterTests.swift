@@ -84,6 +84,55 @@ final class ArtifactWriterTests: XCTestCase {
         XCTAssertTrue(attachment.extractedText.contains("Ship the native app."))
     }
 
+    func testWordWriterCreatesReadableDOCX() throws {
+        let url = folder.appendingPathComponent("brief.docx")
+        try ArtifactWriter.word(
+            title: "Launch Brief",
+            content: "## Decision\nShip the native client.\n- Confirm signing\n- Publish release notes",
+            to: url
+        )
+        try assertArchive(url)
+        let attachment = try AttachmentExtractor.extract(from: url)
+        XCTAssertEqual(attachment.kind, "Word")
+        XCTAssertTrue(attachment.extractedText.contains("Launch Brief"))
+        XCTAssertTrue(attachment.extractedText.contains("Confirm signing"))
+    }
+
+    func testPresentationWriterCreatesPPTX() throws {
+        let url = folder.appendingPathComponent("brief.pptx")
+        try ArtifactWriter.presentation(
+            title: "Aura Launch",
+            subtitle: "Native client",
+            slides: [PresentationSlide(title: "Decision", body: "Ship this week.", bullets: ["Sign the app", "Publish notes"])],
+            to: url
+        )
+        try assertArchive(url)
+        let slideXML = try unzipEntry("ppt/slides/slide2.xml", archive: url)
+        XCTAssertTrue(slideXML.contains("Decision"))
+        XCTAssertTrue(slideXML.contains("Publish notes"))
+    }
+
+    func testOfficeArtifactsConvertWithHeadlessOffice() throws {
+        guard let soffice = try sofficeURL() else { throw XCTSkip("Headless Office is not installed.") }
+        let docx = folder.appendingPathComponent("office-word.docx")
+        let pptx = folder.appendingPathComponent("office-slides.pptx")
+        let output = folder.appendingPathComponent("rendered", isDirectory: true)
+        try ArtifactWriter.word(title: "Office Check", content: "## One\n- Verify structure", to: docx)
+        try ArtifactWriter.presentation(title: "Office Check", subtitle: "Aura", slides: [PresentationSlide(title: "One", body: "Verify structure", bullets: [])], to: pptx)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+
+        let process = Process()
+        process.executableURL = soffice
+        process.arguments = ["--headless", "--convert-to", "pdf", "--outdir", output.path, docx.path, pptx.path]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: output.appendingPathComponent("office-word.pdf").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: output.appendingPathComponent("office-slides.pdf").path))
+    }
+
     func testAttachmentContextMarksDocumentAsUntrusted() {
         let attachment = ChatAttachment(
             fileName: "notes.txt",
@@ -117,5 +166,42 @@ final class ArtifactWriterTests: XCTestCase {
         try handle.truncate(atOffset: UInt64(AttachmentExtractor.maximumFileBytes + 1))
         try handle.close()
         XCTAssertThrowsError(try AttachmentExtractor.validateFileSize(url))
+    }
+
+    private func assertArchive(_ url: URL) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        process.arguments = ["-t", url.path]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        try process.run()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+    }
+
+    private func unzipEntry(_ entry: String, archive: URL) throws -> String {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
+        process.arguments = ["-p", archive.path, entry]
+        process.standardOutput = output
+        try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        XCTAssertEqual(process.terminationStatus, 0)
+        return try XCTUnwrap(String(data: data, encoding: .utf8))
+    }
+
+    private func sofficeURL() throws -> URL? {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", "command -v soffice"]
+        process.standardOutput = output
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return nil }
+        let path = String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return path.isEmpty ? nil : URL(fileURLWithPath: path)
     }
 }

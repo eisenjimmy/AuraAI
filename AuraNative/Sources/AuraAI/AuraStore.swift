@@ -35,6 +35,7 @@ final class AuraStore: ObservableObject {
     }
 
     var selectedMember: TeamMember? { members.first { $0.id == selectedMemberID } }
+    var skillSettings: AgentSkillSettings { settings.skillSettings ?? AgentSkillSettings() }
 
     var globalMemory: String { persistence.globalMemory() }
 
@@ -44,6 +45,13 @@ final class AuraStore: ObservableObject {
     }
 
     func saveSettings() { persistence.saveSettings(settings) }
+
+    func setSkillEnabled(_ enabled: Bool, for skill: AgentSkill) {
+        var updated = skillSettings
+        updated.setEnabled(enabled, for: skill)
+        settings.skillSettings = updated
+        saveSettings()
+    }
 
     func createMember(role: TeamRole) {
         let member = TeamMember(
@@ -248,6 +256,7 @@ final class AuraStore: ObservableObject {
         let workspace = settings.workspacePath.isEmpty ? nil : URL(fileURLWithPath: settings.workspacePath)
         let authorizedFolders = settings.authorizedFolderPaths.map { URL(fileURLWithPath: $0) }
         let agentMode = settings.agentModeEnabled
+        let skills = skillSettings
 
         Task {
             do {
@@ -263,6 +272,7 @@ final class AuraStore: ObservableObject {
                         memberMemory: privateMemory,
                         workspace: workspace,
                         authorizedFolders: authorizedFolders,
+                        skills: skills,
                         requestFolder: { name in await self.requestFolderAccess(named: name) },
                         approval: { approval in await self.requestApproval(approval) }
                     )

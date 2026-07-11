@@ -661,9 +661,17 @@ struct SettingsView: View {
         Form {
             Section(auraText("Work tools", "작업 도구")) {
                 Toggle(auraText("Allow friends to use tools", "친구의 도구 사용 허용"), isOn: $store.settings.agentModeEnabled)
-                Text(auraText("When enabled, friends can inspect approved folders and create Markdown, HTML, and Excel files. Every write or command still asks for approval.", "켜면 친구가 허용된 폴더를 확인하고 Markdown, HTML, Excel 파일을 만들 수 있습니다. 파일 쓰기와 명령 실행은 매번 승인을 요청합니다."))
+                Text(auraText("When enabled, friends can inspect approved folders and create documents using the skills below. Every write or command still asks for approval.", "켜면 친구가 허용된 폴더를 확인하고 아래 기술로 문서를 만들 수 있습니다. 파일 쓰기와 명령 실행은 매번 승인을 요청합니다."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+            Section(auraText("Document skills", "문서 기술")) {
+                ForEach(AgentSkill.allCases) { skill in
+                    Toggle(skill.title, isOn: Binding(
+                        get: { store.skillSettings.isEnabled(skill) },
+                        set: { store.setSkillEnabled($0, for: skill) }
+                    ))
+                }
             }
             HStack {
                 Text(store.settings.workspacePath.isEmpty ? "No workspace selected" : store.settings.workspacePath)

@@ -12,8 +12,13 @@ a permissioned agent harness for practical document work.
 - Supported ingestion includes images, PDF, DOCX, XLSX, RTF, CSV, Markdown,
   HTML, JSON, and plain text.
 - Apple Vision performs offline OCR for images and scanned PDF pages.
-- Approved tools create real XLSX workbooks, self-contained HTML reports, and
-  Markdown documents inside the selected workspace.
+- Approved tools create real XLSX workbooks, editable Word documents, real
+  PowerPoint presentations, self-contained HTML reports, and Markdown documents
+  inside the selected workspace. Each appears as a clickable attachment below
+  the friend's reply.
+- **Settings > Tools > Document skills** independently enables Markdown, HTML,
+  Excel, Word, and PowerPoint. Disabled skills are removed from the model prompt
+  and rejected by the tool executor.
 - Right-clicking a friend opens memory or a Friend Editor for bundled template
   portraits, custom photo upload, specialty, tagline, and personality.
 - The Korean edition reuses its full Korean persona prompts from the Electron
