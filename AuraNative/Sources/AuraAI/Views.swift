@@ -507,27 +507,62 @@ private struct WorkingActivityView: View {
     let member: TeamMember
     let events: [AgentHarnessEvent]
 
+    private var steps: [AgentHarnessEvent] {
+        events.filter { $0.kind != .inferring }
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             TeamAvatar(member: member, size: 25)
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 7) {
                     ProgressView().controlSize(.small)
                     Text(auraText("Working through the task...", "작업 진행 중..."))
                         .foregroundStyle(.secondary)
                 }
-                if let event = events.last {
-                    Text(event.title)
-                        .font(.caption.weight(.medium))
-                    Text(event.detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(steps) { event in
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: stepSymbol(for: event))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(stepColor(for: event))
+                                .frame(width: 14, height: 16)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(event.title)
+                                    .font(.caption.weight(.medium))
+                                Text(event.detail)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
             Spacer()
         }
         .padding(.vertical, 3)
+    }
+
+    private func stepSymbol(for event: AgentHarnessEvent) -> String {
+        switch event.kind {
+        case .received: return "circle"
+        case .toolRequested: return "circle.dotted"
+        case .observation, .completed: return "checkmark.circle.fill"
+        case .denied: return "pause.circle"
+        case .failed: return "exclamationmark.circle"
+        case .inferring: return "circle"
+        }
+    }
+
+    private func stepColor(for event: AgentHarnessEvent) -> Color {
+        switch event.kind {
+        case .failed: return .orange
+        case .denied: return .secondary
+        case .toolRequested: return AuraTheme.accent
+        default: return .secondary
+        }
     }
 }
 

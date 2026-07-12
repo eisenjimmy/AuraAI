@@ -18,11 +18,12 @@ final class AgentLoopTests: XCTestCase {
         XCTAssertFalse(guardrail.allows(call))
     }
 
-    func testEventKeepsToolOutputConcise() {
+    func testEventDoesNotExposeRawToolOutput() {
         let execution = ToolExecution(output: String(repeating: "a", count: 600), grantedFolder: nil)
         let event = AgentHarnessEvent.observation(for: execution, step: 1)
 
         XCTAssertEqual(event.kind, .observation)
-        XCTAssertEqual(event.detail.count, 220)
+        XCTAssertFalse(event.detail.contains(String(repeating: "a", count: 20)))
+        XCTAssertTrue(event.title.contains("Step complete") || event.title.contains("단계 완료"))
     }
 }

@@ -194,11 +194,12 @@ struct AgentHarness {
                 continue
             }
             let normalizedCall = requestedArtifact.map { $0.normalizing(call, title: artifactTitle ?? $0.defaultTitle) } ?? call
+            let progress = normalizedCall.progressPresentation
             let requested = AgentHarnessEvent(
                 kind: .toolRequested,
                 step: step,
-                title: auraText("Requested \(normalizedCall.name)", "\(normalizedCall.name) 도구 요청"),
-                detail: normalizedCall.safeSummary
+                title: progress.title,
+                detail: progress.detail
             )
             events.append(requested)
             await onEvent(requested)
@@ -379,13 +380,34 @@ struct AgentHarnessEvent: Identifiable, Codable, Equatable, Sendable {
         let output = execution.output.trimmingCharacters(in: .whitespacesAndNewlines)
         let isDenied = output.localizedCaseInsensitiveContains("declined") || output.localizedCaseInsensitiveContains("cancelled")
         let isFailure = output.hasPrefix("Refused:") || output.hasPrefix("Unknown tool") || output.hasPrefix("The ") && output.localizedCaseInsensitiveContains("skill is disabled")
+        let fileName = execution.attachments.last?.fileName
+        let presentation: (title: String, detail: String)
+        if let fileName {
+            presentation = (
+                auraText("Your file is ready", "파일이 준비되었습니다"),
+                auraText("Created \(fileName).", "\(fileName)을(를) 만들었습니다.")
+            )
+        } else if isDenied {
+            presentation = (
+                auraText("Waiting for your approval", "승인을 기다리고 있습니다"),
+                auraText("That step was not completed without your permission.", "허용해 주시기 전에는 이 단계를 진행하지 않았습니다.")
+            )
+        } else if isFailure {
+            presentation = (
+                auraText("That step needs attention", "이 단계는 확인이 필요합니다"),
+                auraText("I could not safely complete it yet.", "아직 안전하게 완료할 수 없었습니다.")
+            )
+        } else {
+            presentation = (
+                auraText("Step complete", "단계 완료"),
+                auraText("I have the information needed for the next step.", "다음 단계를 위한 정보를 확인했습니다.")
+            )
+        }
         return AgentHarnessEvent(
             kind: isDenied ? .denied : (isFailure ? .failed : .observation),
             step: step,
-            title: isDenied
-                ? auraText("Action not approved", "작업이 승인되지 않았습니다")
-                : (isFailure ? auraText("Tool could not complete", "도구를 완료할 수 없습니다") : auraText("Tool result recorded", "도구 결과를 기록했습니다")),
-            detail: String(output.prefix(220))
+            title: presentation.title,
+            detail: presentation.detail
         )
     }
 }
@@ -527,6 +549,31 @@ struct ToolCall: Decodable {
         let keys = arguments.keys.sorted()
         guard !keys.isEmpty else { return auraText("No arguments", "인수 없음") }
         return auraText("Arguments: \(keys.joined(separator: ", "))", "인수: \(keys.joined(separator: ", "))")
+    }
+
+    var progressPresentation: (title: String, detail: String) {
+        switch name {
+        case "list_files":
+            return (auraText("Checking the selected folder", "선택한 폴더를 확인하는 중"), auraText("Looking for the files relevant to your request.", "요청과 관련된 파일을 찾고 있습니다."))
+        case "read_file":
+            return (auraText("Reading the file", "파일을 읽는 중"), auraText("Reviewing the information you asked about.", "요청하신 정보를 살펴보고 있습니다."))
+        case "request_folder_access":
+            return (auraText("Requesting folder access", "폴더 접근 권한을 요청하는 중"), auraText("I need your permission before looking there.", "해당 위치를 보기 전에 허용이 필요합니다."))
+        case "write_file":
+            return (auraText("Preparing your file", "파일을 준비하는 중"), auraText("Putting the requested information into a file.", "요청하신 내용을 파일로 정리하고 있습니다."))
+        case "create_spreadsheet":
+            return (auraText("Organizing the spreadsheet", "엑셀을 정리하는 중"), auraText("Turning the information into clear rows and columns.", "정보를 보기 쉬운 행과 열로 정리하고 있습니다."))
+        case "create_presentation":
+            return (auraText("Building the presentation", "프레젠테이션을 만드는 중"), auraText("Arranging the key points into slides.", "핵심 내용을 슬라이드로 구성하고 있습니다."))
+        case "create_word_document", "create_markdown_document", "create_html_document":
+            return (auraText("Drafting the document", "문서를 작성하는 중"), auraText("Organizing the requested material into a clear document.", "요청하신 내용을 읽기 쉬운 문서로 정리하고 있습니다."))
+        case "run_shell":
+            return (auraText("Checking the workspace", "작업 공간을 확인하는 중"), auraText("Verifying the requested work safely.", "요청하신 작업을 안전하게 확인하고 있습니다."))
+        case "computer":
+            return (auraText("Using your Mac", "Mac에서 작업하는 중"), auraText("Completing the action you approved.", "허용하신 작업을 진행하고 있습니다."))
+        default:
+            return (auraText("Working on the next step", "다음 단계를 진행하는 중"), auraText("Taking the next safe action for your request.", "요청을 위한 다음 안전한 작업을 진행하고 있습니다."))
+        }
     }
 
     static func parse(_ text: String) -> ToolCall? {
