@@ -16,17 +16,22 @@ struct ConversationContextStatus: Equatable {
             return auraText("Whole chat in context · \(usage)", "전체 대화가 맥락에 포함됨 · \(usage)")
         }
         let date = includedSince.formatted(date: .abbreviated, time: .shortened)
-        return auraText("Remembering from \(date) · \(usage)", "\(date)부터 기억 중 · \(usage)")
+        return auraText("Earlier chat summarized · recent messages from \(date) · \(usage)", "이전 대화 요약 포함 · \(date)부터 최근 대화 원문 포함 · \(usage)")
     }
 }
 
 struct ConversationContextWindow {
-    /// Reserve room for policy, memories, the current prompt, and the reply.
-    static let historyTokenBudget = 5_800
+    /// Reserve room for the harness policy, memories, the current prompt, and
+    /// a streamed reply. Earlier turns are represented by a continuity ledger.
+    static let historyTokenBudget = 3_200
 
     struct Selection {
         var messages: [ConversationMessage]
         var status: ConversationContextStatus
+
+        func omitted(from allMessages: [ConversationMessage]) -> [ConversationMessage] {
+            Array(allMessages.prefix(max(0, allMessages.count - messages.count)))
+        }
     }
 
     static func select(from messages: [ConversationMessage]) -> Selection {

@@ -38,7 +38,7 @@ struct OpenAICompatibleClient {
             if configuration.kind.isCloud, !configuration.apiKey.isEmpty {
                 request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
             }
-            request.httpBody = try JSONEncoder().encode(ChatRequest(model: configuration.model, messages: messages, stream: true))
+            request.httpBody = try JSONEncoder().encode(ChatRequest(model: configuration.model, messages: messages, maxTokens: configuration.kind == .local ? 1_024 : nil, stream: true))
 
             let (bytes, response) = try await URLSession.shared.bytes(for: request)
             guard let http = response as? HTTPURLResponse else {
@@ -85,7 +85,7 @@ struct OpenAICompatibleClient {
             if configuration.kind.isCloud, !configuration.apiKey.isEmpty {
                 request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
             }
-            request.httpBody = try JSONEncoder().encode(ChatRequest(model: configuration.model, messages: messages, stream: false))
+            request.httpBody = try JSONEncoder().encode(ChatRequest(model: configuration.model, messages: messages, maxTokens: configuration.kind == .local ? 1_024 : nil, stream: false))
 
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse else {
@@ -131,7 +131,15 @@ struct OpenAICompatibleClient {
     private struct ChatRequest: Encodable {
         var model: String
         var messages: [ModelMessage]
+        var maxTokens: Int?
         var stream: Bool
+
+        private enum CodingKeys: String, CodingKey {
+            case model
+            case messages
+            case maxTokens = "max_tokens"
+            case stream
+        }
     }
 
     private struct ChatResponse: Decodable {
@@ -218,7 +226,7 @@ private struct AnthropicMessagesClient {
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
         request.httpBody = try? JSONEncoder().encode(AnthropicRequest(
             model: configuration.model,
-            maxTokens: 4_096,
+            maxTokens: 1_024,
             system: system.isEmpty ? nil : system,
             messages: conversation,
             stream: streaming

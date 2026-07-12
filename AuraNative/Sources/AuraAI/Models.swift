@@ -569,6 +569,27 @@ enum ToolProtocolSanitizer {
     }
 }
 
+/// Small local models sometimes escape their own Markdown punctuation, which
+/// leaves literal `**\\*\\*` markers in otherwise ordinary prose.
+enum MarkdownSanitizer {
+    static func renderable(_ text: String) -> String {
+        var isCodeFence = false
+        return text
+            .components(separatedBy: .newlines)
+            .map { line in
+                if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                    isCodeFence.toggle()
+                    return line
+                }
+                guard !isCodeFence else { return line }
+                return line
+                    .replacingOccurrences(of: "\\*", with: "*")
+                    .replacingOccurrences(of: "\\_", with: "_")
+            }
+            .joined(separator: "\n")
+    }
+}
+
 struct ChatAttachment: Identifiable, Codable, Equatable, Sendable {
     var id: UUID = UUID()
     var fileName: String

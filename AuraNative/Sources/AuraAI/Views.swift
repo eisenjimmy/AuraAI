@@ -442,6 +442,7 @@ private struct ChatView: View {
                             WorkingActivityView(member: member, events: store.harnessEvents)
                             .id("working")
                         }
+                        Color.clear.frame(height: 1).id("chat-bottom")
                     }
                     .frame(maxWidth: 780)
                     .frame(maxWidth: .infinity)
@@ -459,6 +460,12 @@ private struct ChatView: View {
                 }
                 .onChange(of: store.streamingResponse) { _, _ in
                     if store.isStreaming(for: member) { proxy.scrollTo("streaming", anchor: .bottom) }
+                }
+                .onChange(of: member.id) { _, _ in
+                    scrollToLatest(proxy)
+                }
+                .onAppear {
+                    scrollToLatest(proxy)
                 }
             }
 
@@ -509,6 +516,16 @@ private struct ChatView: View {
             .padding(.horizontal, 24)
             .padding(.vertical, 14)
             .background(.bar)
+        }
+    }
+
+    private func scrollToLatest(_ proxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            if let last = store.messages.last {
+                proxy.scrollTo(last.id, anchor: .bottom)
+            } else {
+                proxy.scrollTo("chat-bottom", anchor: .bottom)
+            }
         }
     }
 }
@@ -681,7 +698,10 @@ private struct ArtifactPreviewPane: View {
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .allowsTightening(true)
                     .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(-1)
+                Spacer(minLength: 0)
                 HStack(spacing: 3) {
                     previewButton("square.and.arrow.down", help: auraText("Export a copy", "사본 내보내기")) {
                         store.export(attachment)
@@ -697,7 +717,7 @@ private struct ArtifactPreviewPane: View {
                     }
                 }
                 .fixedSize(horizontal: true, vertical: false)
-                .layoutPriority(1)
+                .layoutPriority(2)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -807,7 +827,7 @@ private struct MessageBubble: View {
                     .foregroundStyle(.secondary)
                 Group {
                     if message.role == .assistant {
-                        MarkdownMessageView(content: message.displayContent)
+                        GFMMarkdownMessageView(content: message.displayContent)
                             .padding(.top, 1)
                     } else {
                         Text(message.displayContent)
@@ -886,7 +906,7 @@ private struct MarkdownMessageView: View {
     }
 
     private var blocks: [Block] {
-        let lines = content.components(separatedBy: .newlines)
+        let lines = MarkdownSanitizer.renderable(content).components(separatedBy: .newlines)
         var result: [Block] = []
         var index = 0
 
@@ -945,10 +965,11 @@ private struct MarkdownMessageView: View {
 
     private func inlineText(_ source: String) -> Text {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        if let attributed = try? AttributedString(markdown: source, options: options) {
+        let sanitized = MarkdownSanitizer.renderable(source)
+        if let attributed = try? AttributedString(markdown: sanitized, options: options) {
             return Text(attributed)
         }
-        return Text(source)
+        return Text(sanitized)
     }
 
     private func heading(from line: String) -> Block? {

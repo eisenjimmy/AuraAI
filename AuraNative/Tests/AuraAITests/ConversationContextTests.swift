@@ -11,6 +11,17 @@ final class ConversationContextTests: XCTestCase {
         XCTAssertEqual(selection.messages.map(\.id), [recent.id])
         XCTAssertTrue(selection.status.usesRollingWindow)
         XCTAssertEqual(selection.status.includedSince, recent.createdAt)
+        XCTAssertEqual(selection.omitted(from: [old, recent]).map(\.id), [old.id])
+    }
+
+    func testContinuityFallbackPreservesBothConversationRoles() {
+        let user = ConversationMessage(role: .user, content: "We are discussing Cinderella.")
+        let friend = ConversationMessage(role: .assistant, content: "The central theme is self-discovery.")
+
+        let fallback = ConversationContinuityWorker.fallback(for: [user, friend])
+
+        XCTAssertTrue(fallback?.contains("User: We are discussing Cinderella.") == true)
+        XCTAssertTrue(fallback?.contains("Friend: The central theme is self-discovery.") == true)
     }
 
     func testWholeShortChatStaysInContext() {

@@ -91,4 +91,16 @@ final class ToolCallTests: XCTestCase {
         XCTAssertTrue(ToolProtocolSanitizer.isPotentialInternalProtocolPrefix("<TOOL_RESULT"))
         XCTAssertFalse(ToolProtocolSanitizer.isPotentialInternalProtocolPrefix("Here is the result"))
     }
+
+    func testRestoresEscapedMarkdownEmphasisOutsideCodeBlocks() {
+        XCTAssertEqual(MarkdownSanitizer.renderable("**Important\\*\\*"), "**Important**")
+        XCTAssertEqual(MarkdownSanitizer.renderable("```\n\\* literal code\n```"), "```\n\\* literal code\n```")
+    }
+
+    func testGFMRendererSupportsTablesAndRejectsRawHTML() {
+        let html = GFMMarkdownRenderer.html(from: "| Name | Role |\n| --- | --- |\n| Ella | Hero |\n\n<script>alert(1)</script>")
+
+        XCTAssertTrue(html?.contains("<table>") == true)
+        XCTAssertFalse(html?.localizedCaseInsensitiveContains("<script") == true)
+    }
 }

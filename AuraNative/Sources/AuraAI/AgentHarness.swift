@@ -23,6 +23,7 @@ struct AgentHarness {
         requestedArtifact: ArtifactIntent?,
         attachments: [ChatAttachment],
         memoryUpdate: MemoryUpdate? = nil,
+        conversationContinuity: String? = nil,
         requestFolder: @escaping @MainActor (String) async -> URL?,
         approval: @escaping @MainActor (AgentApproval) async -> Bool,
         onEvent: @escaping @MainActor (AgentHarnessEvent) -> Void = { _ in },
@@ -82,7 +83,8 @@ struct AgentHarness {
             skills: skills,
             requiredFolder: requestedFolder,
             attachments: attachments,
-            memoryUpdate: memoryUpdate
+            memoryUpdate: memoryUpdate,
+            conversationContinuity: conversationContinuity
         )
         if let initialFolderResult {
             transcript.append(internalToolResult(initialFolderResult))
@@ -391,7 +393,8 @@ struct AgentHarness {
         skills: AgentSkillSettings,
         requiredFolder: String?,
         attachments: [ChatAttachment],
-        memoryUpdate: MemoryUpdate?
+        memoryUpdate: MemoryUpdate?,
+        conversationContinuity: String?
     ) -> [ModelMessage] {
         let workspaceDescription = workspace?.path ?? "No workspace selected. Do not request file or shell tools."
         let folderDescription = authorizedFolders.isEmpty
@@ -441,6 +444,9 @@ struct AgentHarness {
         }
         if let memoryUpdate {
             messages.append(ModelMessage(role: "system", content: memoryUpdate.modelContext))
+        }
+        if let conversationContinuity, !conversationContinuity.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            messages.append(ModelMessage(role: "system", content: "Conversation continuity from earlier turns. Treat this as factual context, then prioritize the recent verbatim messages that follow:\n\(conversationContinuity)"))
         }
         messages += history.map {
             ModelMessage(

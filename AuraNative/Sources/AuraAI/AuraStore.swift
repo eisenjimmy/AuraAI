@@ -32,6 +32,7 @@ final class AuraStore: ObservableObject {
     private var approvalContinuation: CheckedContinuation<Bool, Never>?
     private var privacyDraft = ""
     private var privacyAttachments: [ChatAttachment] = []
+    private var continuityCache: [UUID: (signature: String, summary: String)] = [:]
 
     init() {
         var loadedSettings = persistence.loadSettings()
@@ -382,6 +383,11 @@ final class AuraStore: ObservableObject {
                 )
                 let globalMemory = globalMemoryContext(query: text)
                 let privateMemory = memberMemoryContext(for: member, query: text)
+                let continuity = await conversationContinuity(
+                    for: member,
+                    earlierMessages: boundedHistory.omitted(from: Array(history)),
+                    configuration: config
+                )
                 let response: String
                 let responseAttachments: [ChatAttachment]
                 let result = try await AgentHarness().run(
@@ -397,6 +403,7 @@ final class AuraStore: ObservableObject {
                     requestedArtifact: requestedArtifact,
                     attachments: attachments,
                     memoryUpdate: memoryUpdate,
+                    conversationContinuity: continuity,
                     requestFolder: { name in await self.requestFolderAccess(named: name) },
                     approval: { approval in await self.requestApproval(approval) },
                     onEvent: { event in self.harnessEvents.append(event) },
@@ -431,6 +438,26 @@ final class AuraStore: ObservableObject {
             isWorking = false
             if activeWorkingMemberID == member.id { activeWorkingMemberID = nil }
         }
+    }
+
+    private func conversationContinuity(
+        for member: TeamMember,
+        earlierMessages: [ConversationMessage],
+        configuration: ProviderConfiguration
+    ) async -> String? {
+        guard !earlierMessages.isEmpty else { return nil }
+        let signature = ConversationContinuityWorker.signature(for: earlierMessages)
+        if let cached = continuityCache[member.id], cached.signature == signature {
+            return cached.summary
+        }
+        let summary = await ConversationContinuityWorker().summarize(
+            earlierMessages: earlierMessages,
+            configuration: configuration
+        )
+        if let summary {
+            continuityCache[member.id] = (signature, summary)
+        }
+        return summary
     }
 
     private func updatePrivateMemoryIfRequested(

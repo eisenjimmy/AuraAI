@@ -73,21 +73,23 @@ struct MemorySubagent {
         guard Self.isCaptureRequest(request) else { return [] }
         let transcript = conversation
             .suffix(16)
-            .filter { $0.role == .user }
-            .map { "User: \($0.displayContent)" }
+            .map { message in
+                let speaker = message.role == .user ? "User" : "Friend"
+                return "\(speaker): \(message.displayContent)"
+            }
             .joined(separator: "\n")
         guard !transcript.isEmpty else { return [] }
 
         let instructions = """
         You are Aura's private-memory curator, a separate background worker.
-        Extract only durable, explicit facts about the user, their stated preferences, or a lasting project context from the user's messages below. Never save a request to remember, a greeting, a question, a model response, a temporary task, or anything inferred rather than stated. Every fact must stand alone and be supported verbatim by the transcript.
+        Extract only durable, explicit facts about the user, their stated preferences, or a lasting shared conversation context from the transcript below. Friend messages may explain an ongoing topic or a completed conclusion, but must never be used as evidence for an unconfirmed personal fact. When the user asks to remember the conversation, retain up to two concise, useful context facts from both sides of the discussion. Never save the request to remember, a greeting, or anything invented.
 
         Return strict JSON only in this form:
         {"facts":[{"text":"The user lives in Dix Hills, NY.","retention":"long_term"}]}
 
         Use retention "seven_days" only for clearly temporary information, "thirty_days" for this-month information, and "long_term" otherwise. Return {"facts":[]} when no durable fact is supported. Keep at most four facts. Preserve the user's language where practical.
 
-        User messages:
+        Conversation transcript:
         \(transcript)
         """
         let reply = try await client.complete(
