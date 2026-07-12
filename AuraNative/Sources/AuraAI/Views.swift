@@ -418,56 +418,67 @@ private struct FriendsSidebar: View {
     @Binding var isShowingAddMember: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 9) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AuraTheme.accent)
-                Text("Aura")
-                    .font(.headline)
-                Spacer()
-                Button { isShowingAddMember = true } label: { Image(systemName: "person.badge.plus") }
-                    .buttonStyle(.plain)
-                    .focusable(false)
-                    .focusEffectDisabled()
-                    .help(auraText("Add friend", "친구 추가"))
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 11)
-
-            Text(auraText("Friends", "친구"))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.tertiary)
+        ZStack {
+            Color(nsColor: .underPageBackgroundColor)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 9) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(AuraTheme.accent)
+                    Text("Aura")
+                        .font(.headline)
+                    Spacer()
+                    Button { isShowingAddMember = true } label: { Image(systemName: "person.badge.plus") }
+                        .buttonStyle(.plain)
+                        .focusable(false)
+                        .focusEffectDisabled()
+                        .help(auraText("Add friend", "친구 추가"))
+                }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 8)
+                .padding(.top, 14)
+                .padding(.bottom, 11)
 
-            ScrollView {
-                LazyVStack(spacing: 3) {
-                    ForEach(store.members) { member in
-                        FriendRow(member: member, isSelected: member.id == store.selectedMemberID, isWorking: store.isWorking(for: member))
-                            .onTapGesture { store.select(member) }
-                            .contextMenu {
-                                Button(auraText("Edit friend", "친구 편집")) { store.editingMember = member }
-                                Button(auraText("Open memory", "기억 열기")) { store.memoryMember = member }
-                                if !TeamMember.defaults.contains(where: { $0.id == member.id }) {
-                                    Button(auraText("Remove", "삭제"), role: .destructive) { store.select(member); store.deleteSelectedMember() }
+                Text(auraText("Friends", "친구"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+
+                ScrollView {
+                    LazyVStack(spacing: 3) {
+                        ForEach(store.members) { member in
+                            FriendRow(member: member, isSelected: member.id == store.selectedMemberID, isWorking: store.isWorking(for: member))
+                                .onTapGesture { store.select(member) }
+                                .contextMenu {
+                                    Button(auraText("Edit friend", "친구 편집")) { store.editingMember = member }
+                                    Button(auraText("Open memory", "기억 열기")) { store.memoryMember = member }
+                                    if !TeamMember.defaults.contains(where: { $0.id == member.id }) {
+                                        Button(auraText("Remove", "삭제"), role: .destructive) { store.select(member); store.deleteSelectedMember() }
+                                    }
                                 }
-                            }
+                        }
                     }
+                    .padding(.horizontal, 8)
+                }
+                Spacer(minLength: 12)
+                Divider().overlay(.white.opacity(0.10))
+                VStack(spacing: 1) {
+                    SidebarAction(title: auraText("Global memory", "공통 기억"), symbol: "brain.head.profile") { store.isShowingGlobalMemory = true }
+                    SidebarAction(title: auraText("Settings", "설정"), symbol: "gearshape") { store.isShowingSettings = true }
                 }
                 .padding(.horizontal, 8)
+                .padding(.vertical, 9)
             }
-            Spacer(minLength: 12)
-            Divider().overlay(.white.opacity(0.10))
-            VStack(spacing: 1) {
-                SidebarAction(title: auraText("Global memory", "공통 기억"), symbol: "brain.head.profile") { store.isShowingGlobalMemory = true }
-                SidebarAction(title: auraText("Settings", "설정"), symbol: "gearshape") { store.isShowingSettings = true }
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 27, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 27, style: .continuous)
+                    .stroke(.white.opacity(0.13), lineWidth: 1)
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 9)
+            .clipShape(RoundedRectangle(cornerRadius: 27, style: .continuous))
+            .padding(.leading, 7)
+            .padding(.trailing, 5)
+            .padding(.vertical, 7)
         }
-        .background(.ultraThinMaterial)
     }
 }
 
@@ -485,6 +496,8 @@ private struct SidebarAction: View {
                 .padding(.vertical, 7)
         }
         .buttonStyle(.plain)
+        .focusable(false)
+        .focusEffectDisabled()
     }
 }
 
