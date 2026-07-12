@@ -205,11 +205,13 @@ private struct ProviderConnectionFields: View {
 struct AuraWorkspaceView: View {
     @EnvironmentObject private var store: AuraStore
     @State private var isShowingAddMember = false
+    @State private var isSidebarVisible = true
 
     var body: some View {
         Group {
             if let member = store.selectedMember {
                 AdaptiveWorkspaceSplit(
+                    showsSidebar: $isSidebarVisible,
                     sidebar: FriendsSidebar(isShowingAddMember: $isShowingAddMember)
                         .environmentObject(store),
                     conversation: ChatView(member: member)
@@ -218,10 +220,24 @@ struct AuraWorkspaceView: View {
                         AnyView(ArtifactPreviewPane(attachment: $0).environmentObject(store))
                     }
                 )
+                .ignoresSafeArea(.container, edges: .top)
             } else {
                 ContentUnavailableView(auraText("Choose a teammate", "친구를 선택하세요"), systemImage: "person.2")
             }
         }
+        .overlay(alignment: .topLeading) {
+            Button { isSidebarVisible.toggle() } label: {
+                Image(systemName: "sidebar.left")
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .focusable(false)
+            .focusEffectDisabled()
+            .help(isSidebarVisible ? auraText("Hide sidebar", "사이드바 숨기기") : auraText("Show sidebar", "사이드바 보이기"))
+            .padding(.leading, 142)
+            .padding(.top, 9)
+        }
+        .overlay { WindowResizeCursorOverlay() }
         .sheet(isPresented: $isShowingAddMember) { AddMemberSheet() }
         .sheet(isPresented: $store.isShowingSettings) { SettingsView() }
         .sheet(isPresented: $store.isShowingGlobalMemory) {
@@ -244,15 +260,18 @@ struct AuraWorkspaceView: View {
 /// A single native split hierarchy keeps the navigation rail from being
 /// compressed by an outer NavigationSplitView before the other panes resize.
 private struct AdaptiveWorkspaceSplit: NSViewRepresentable {
+    @Binding var showsSidebar: Bool
     let sidebar: AnyView
     let conversation: AnyView
     let preview: AnyView?
 
     init<Sidebar: View, Conversation: View>(
+        showsSidebar: Binding<Bool>,
         sidebar: Sidebar,
         conversation: Conversation,
         preview: AnyView?
     ) {
+        self._showsSidebar = showsSidebar
         self.sidebar = AnyView(sidebar)
         self.conversation = AnyView(conversation)
         self.preview = preview
@@ -262,12 +281,24 @@ private struct AdaptiveWorkspaceSplit: NSViewRepresentable {
 
     func makeNSView(context: Context) -> AuraWorkspaceSplitView {
         let splitView = AuraWorkspaceSplitView()
-        context.coordinator.install(in: splitView, sidebar: sidebar, conversation: conversation, preview: preview)
+        context.coordinator.install(
+            in: splitView,
+            sidebar: sidebar,
+            conversation: conversation,
+            preview: preview,
+            sidebarVisibility: $showsSidebar
+        )
         return splitView
     }
 
     func updateNSView(_ splitView: AuraWorkspaceSplitView, context: Context) {
-        context.coordinator.update(in: splitView, sidebar: sidebar, conversation: conversation, preview: preview)
+        context.coordinator.update(
+            in: splitView,
+            sidebar: sidebar,
+            conversation: conversation,
+            preview: preview,
+            sidebarVisibility: $showsSidebar
+        )
     }
 
     final class Coordinator: NSObject, NSSplitViewDelegate {
@@ -276,9 +307,19 @@ private struct AdaptiveWorkspaceSplit: NSViewRepresentable {
         private var sidebarHost: NSHostingController<AnyView>?
         private var conversationHost: NSHostingController<AnyView>?
         private var previewHost: NSHostingController<AnyView>?
+        private var sidebarVisibility: Binding<Bool>?
+        private var lastContainerWidth: CGFloat = 0
+        private var wasAutomaticallyCollapsed = false
 
-        func install(in splitView: AuraWorkspaceSplitView, sidebar: AnyView, conversation: AnyView, preview: AnyView?) {
+        func install(
+            in splitView: AuraWorkspaceSplitView,
+            sidebar: AnyView,
+            conversation: AnyView,
+            preview: AnyView?,
+            sidebarVisibility: Binding<Bool>
+        ) {
             splitView.delegate = self
+            self.sidebarVisibility = sidebarVisibility
 
             let sidebarHost = NSHostingController(rootView: sidebar)
             let conversationHost = NSHostingController(rootView: conversation)
@@ -297,10 +338,18 @@ private struct AdaptiveWorkspaceSplit: NSViewRepresentable {
             DispatchQueue.main.async { [weak self, weak splitView] in
                 guard let self, let splitView else { return }
                 self.setInitialPanePositions(in: splitView)
+                self.applySidebarVisibility(in: splitView)
             }
         }
 
-        func update(in splitView: AuraWorkspaceSplitView, sidebar: AnyView, conversation: AnyView, preview: AnyView?) {
+        func update(
+            in splitView: AuraWorkspaceSplitView,
+            sidebar: AnyView,
+            conversation: AnyView,
+            preview: AnyView?,
+            sidebarVisibility: Binding<Bool>
+        ) {
+            self.sidebarVisibility = sidebarVisibility
             sidebarHost?.rootView = sidebar
             conversationHost?.rootView = conversation
 
@@ -324,6 +373,7 @@ private struct AdaptiveWorkspaceSplit: NSViewRepresentable {
             case (nil, nil):
                 break
             }
+            applySidebarVisibility(in: splitView)
         }
 
         private func updateHoldingPriorities(in splitView: AuraWorkspaceSplitView) {
@@ -349,6 +399,17 @@ private struct AdaptiveWorkspaceSplit: NSViewRepresentable {
             splitView.setPosition(sidebarWidth + divider + remaining / 2, ofDividerAt: 1)
         }
 
+        private func applySidebarVisibility(in splitView: AuraWorkspaceSplitView) {
+            guard let sidebarView = sidebarHost?.view, let sidebarVisibility else { return }
+            let shouldHide = !sidebarVisibility.wrappedValue
+            guard sidebarView.isHidden != shouldHide else { return }
+            sidebarView.isHidden = shouldHide
+            splitView.adjustSubviews()
+            if !shouldHide {
+                splitView.setPosition(300, ofDividerAt: 0)
+            }
+        }
+
         func splitView(_ splitView: NSSplitView, canCollapseSubview subview: NSView) -> Bool { false }
 
         func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposed: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
@@ -369,6 +430,26 @@ private struct AdaptiveWorkspaceSplit: NSViewRepresentable {
                 return min(proposed, splitView.bounds.width - trailingMinimum - divider * CGFloat(max(1, splitView.arrangedSubviews.count - 1)))
             }
             return min(proposed, splitView.bounds.width - contentMinimum - divider)
+        }
+
+        func splitViewDidResizeSubviews(_ notification: Notification) {
+            guard let splitView = notification.object as? NSSplitView,
+                  let sidebarVisibility else { return }
+            let width = splitView.bounds.width
+            guard abs(width - lastContainerWidth) > 1 else { return }
+            lastContainerWidth = width
+
+            let hasPreview = previewHost != nil
+            let collapseThreshold: CGFloat = hasPreview ? 1_300 : 980
+            let restoreThreshold: CGFloat = hasPreview ? 1_400 : 1_080
+
+            if width < collapseThreshold, sidebarVisibility.wrappedValue {
+                wasAutomaticallyCollapsed = true
+                DispatchQueue.main.async { sidebarVisibility.wrappedValue = false }
+            } else if width > restoreThreshold, wasAutomaticallyCollapsed, !sidebarVisibility.wrappedValue {
+                wasAutomaticallyCollapsed = false
+                DispatchQueue.main.async { sidebarVisibility.wrappedValue = true }
+            }
         }
     }
 }
@@ -403,8 +484,38 @@ private final class AuraWorkspaceSplitView: NSSplitView {
                 width: dividerThickness + 8,
                 height: bounds.height
             )
-            addCursorRect(hitArea, cursor: .resizeLeftRight)
+            addCursorRect(hitArea, cursor: .columnResize(directions: .all))
         }
+    }
+
+    override func layout() {
+        super.layout()
+        window?.invalidateCursorRects(for: self)
+    }
+}
+
+private struct WindowResizeCursorOverlay: NSViewRepresentable {
+    func makeNSView(context: Context) -> WindowResizeCursorView { WindowResizeCursorView() }
+    func updateNSView(_ view: WindowResizeCursorView, context: Context) {}
+}
+
+private final class WindowResizeCursorView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        let edge: CGFloat = 6
+        let corner: CGFloat = 14
+
+        addCursorRect(NSRect(x: 0, y: corner, width: edge, height: max(0, bounds.height - corner * 2)), cursor: .frameResize(position: .left, directions: .all))
+        addCursorRect(NSRect(x: bounds.width - edge, y: corner, width: edge, height: max(0, bounds.height - corner * 2)), cursor: .frameResize(position: .right, directions: .all))
+        addCursorRect(NSRect(x: corner, y: bounds.height - edge, width: max(0, bounds.width - corner * 2), height: edge), cursor: .frameResize(position: .top, directions: .all))
+        addCursorRect(NSRect(x: corner, y: 0, width: max(0, bounds.width - corner * 2), height: edge), cursor: .frameResize(position: .bottom, directions: .all))
+
+        addCursorRect(NSRect(x: 0, y: bounds.height - corner, width: corner, height: corner), cursor: .frameResize(position: .topLeft, directions: .all))
+        addCursorRect(NSRect(x: bounds.width - corner, y: bounds.height - corner, width: corner, height: corner), cursor: .frameResize(position: .topRight, directions: .all))
+        addCursorRect(NSRect(x: 0, y: 0, width: corner, height: corner), cursor: .frameResize(position: .bottomLeft, directions: .all))
+        addCursorRect(NSRect(x: bounds.width - corner, y: 0, width: corner, height: corner), cursor: .frameResize(position: .bottomRight, directions: .all))
     }
 
     override func layout() {
@@ -418,67 +529,56 @@ private struct FriendsSidebar: View {
     @Binding var isShowingAddMember: Bool
 
     var body: some View {
-        ZStack {
-            Color(nsColor: .underPageBackgroundColor)
-            VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 9) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(AuraTheme.accent)
-                    Text("Aura")
-                        .font(.headline)
-                    Spacer()
-                    Button { isShowingAddMember = true } label: { Image(systemName: "person.badge.plus") }
-                        .buttonStyle(.plain)
-                        .focusable(false)
-                        .focusEffectDisabled()
-                        .help(auraText("Add friend", "친구 추가"))
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 9) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AuraTheme.accent)
+                Text("Aura")
+                    .font(.headline)
+                Spacer()
+                Button { isShowingAddMember = true } label: { Image(systemName: "person.badge.plus") }
+                    .buttonStyle(.plain)
+                    .focusable(false)
+                    .focusEffectDisabled()
+                    .help(auraText("Add friend", "친구 추가"))
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 50)
+            .padding(.bottom, 11)
+
+            Text(auraText("Friends", "친구"))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tertiary)
                 .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 11)
+                .padding(.bottom, 8)
 
-                Text(auraText("Friends", "친구"))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
-
-                ScrollView {
-                    LazyVStack(spacing: 3) {
-                        ForEach(store.members) { member in
-                            FriendRow(member: member, isSelected: member.id == store.selectedMemberID, isWorking: store.isWorking(for: member))
-                                .onTapGesture { store.select(member) }
-                                .contextMenu {
-                                    Button(auraText("Edit friend", "친구 편집")) { store.editingMember = member }
-                                    Button(auraText("Open memory", "기억 열기")) { store.memoryMember = member }
-                                    if !TeamMember.defaults.contains(where: { $0.id == member.id }) {
-                                        Button(auraText("Remove", "삭제"), role: .destructive) { store.select(member); store.deleteSelectedMember() }
-                                    }
+            ScrollView {
+                LazyVStack(spacing: 3) {
+                    ForEach(store.members) { member in
+                        FriendRow(member: member, isSelected: member.id == store.selectedMemberID, isWorking: store.isWorking(for: member))
+                            .onTapGesture { store.select(member) }
+                            .contextMenu {
+                                Button(auraText("Edit friend", "친구 편집")) { store.editingMember = member }
+                                Button(auraText("Open memory", "기억 열기")) { store.memoryMember = member }
+                                if !TeamMember.defaults.contains(where: { $0.id == member.id }) {
+                                    Button(auraText("Remove", "삭제"), role: .destructive) { store.select(member); store.deleteSelectedMember() }
                                 }
-                        }
+                            }
                     }
-                    .padding(.horizontal, 8)
-                }
-                Spacer(minLength: 12)
-                Divider().overlay(.white.opacity(0.10))
-                VStack(spacing: 1) {
-                    SidebarAction(title: auraText("Global memory", "공통 기억"), symbol: "brain.head.profile") { store.isShowingGlobalMemory = true }
-                    SidebarAction(title: auraText("Settings", "설정"), symbol: "gearshape") { store.isShowingSettings = true }
                 }
                 .padding(.horizontal, 8)
-                .padding(.vertical, 9)
             }
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 27, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 27, style: .continuous)
-                    .stroke(.white.opacity(0.13), lineWidth: 1)
+            Spacer(minLength: 12)
+            Divider().overlay(.white.opacity(0.10))
+            VStack(spacing: 1) {
+                SidebarAction(title: auraText("Global memory", "공통 기억"), symbol: "brain.head.profile") { store.isShowingGlobalMemory = true }
+                SidebarAction(title: auraText("Settings", "설정"), symbol: "gearshape") { store.isShowingSettings = true }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 27, style: .continuous))
-            .padding(.leading, 7)
-            .padding(.trailing, 5)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 9)
         }
+        .background(.ultraThinMaterial)
     }
 }
 
@@ -598,7 +698,8 @@ private struct ChatView: View {
                     .focusEffectDisabled()
             }
             .padding(.horizontal, 22)
-            .padding(.vertical, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 14)
             .background(.bar)
 
             ScrollViewReader { proxy in
@@ -910,7 +1011,8 @@ private struct ArtifactPreviewPane: View {
                 .layoutPriority(2)
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 12)
             .background(.bar)
 
             Group {
