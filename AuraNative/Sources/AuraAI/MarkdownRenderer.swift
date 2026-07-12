@@ -75,7 +75,7 @@ struct GFMMarkdownMessageView: NSViewRepresentable {
         let rendered = GFMMarkdownRenderer.attributed(from: content)
         guard view.attributedString() != rendered else { return }
         view.textStorage?.setAttributedString(rendered)
-        view.invalidateIntrinsicContentSize()
+        view.invalidateMeasuredSize()
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: MarkdownTextView, context: Context) -> CGSize? {
@@ -85,6 +85,8 @@ struct GFMMarkdownMessageView: NSViewRepresentable {
 }
 
 final class MarkdownTextView: NSTextView {
+    private var measuredWidth: CGFloat = 0
+
     init() {
         let container = NSTextContainer(size: NSSize(width: 680, height: CGFloat.greatestFiniteMagnitude))
         container.widthTracksTextView = true
@@ -104,6 +106,32 @@ final class MarkdownTextView: NSTextView {
     }
 
     required init?(coder: NSCoder) { nil }
+
+    override var intrinsicContentSize: NSSize {
+        let width = max(120, bounds.width > 0 ? bounds.width : 680)
+        return NSSize(width: NSView.noIntrinsicMetric, height: height(for: width))
+    }
+
+    override func layout() {
+        super.layout()
+        let width = bounds.width.rounded(.down)
+        guard width > 0, width != measuredWidth else { return }
+        measuredWidth = width
+        invalidateIntrinsicContentSize()
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let didChangeWidth = abs(newSize.width - frame.width) > 0.5
+        super.setFrameSize(newSize)
+        guard didChangeWidth else { return }
+        measuredWidth = 0
+        invalidateIntrinsicContentSize()
+    }
+
+    func invalidateMeasuredSize() {
+        measuredWidth = 0
+        invalidateIntrinsicContentSize()
+    }
 
     func height(for width: CGFloat) -> CGFloat {
         guard let container = textContainer, let layoutManager else { return 1 }

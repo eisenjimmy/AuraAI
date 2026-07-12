@@ -1,4 +1,5 @@
 import AppKit
+import PDFKit
 import QuickLookUI
 import SwiftUI
 import WebKit
@@ -392,6 +393,24 @@ private final class AuraWorkspaceSplitView: NSSplitView {
         NSColor(calibratedWhite: 0.28, alpha: 0.9).setFill()
         rect.fill()
     }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        for pane in arrangedSubviews.dropLast() {
+            let hitArea = NSRect(
+                x: pane.frame.maxX - 4,
+                y: bounds.minY,
+                width: dividerThickness + 8,
+                height: bounds.height
+            )
+            addCursorRect(hitArea, cursor: .resizeLeftRight)
+        }
+    }
+
+    override func layout() {
+        super.layout()
+        window?.invalidateCursorRects(for: self)
+    }
 }
 
 private struct FriendsSidebar: View {
@@ -400,18 +419,25 @@ private struct FriendsSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: "sparkles").foregroundStyle(AuraTheme.accent)
-                Text("Aura").font(.headline)
+            HStack(spacing: 9) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(AuraTheme.accent)
+                Text("Aura")
+                    .font(.headline)
                 Spacer()
                 Button { isShowingAddMember = true } label: { Image(systemName: "person.badge.plus") }
                     .buttonStyle(.plain)
+                    .focusable(false)
+                    .focusEffectDisabled()
                     .help(auraText("Add friend", "친구 추가"))
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 15)
-            Text(auraText("FRIENDS", "친구"))
-                .font(.caption2.weight(.semibold))
+            .padding(.top, 14)
+            .padding(.bottom, 11)
+
+            Text(auraText("Friends", "친구"))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.tertiary)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
@@ -433,14 +459,15 @@ private struct FriendsSidebar: View {
                 .padding(.horizontal, 8)
             }
             Spacer(minLength: 12)
-            Divider()
-            VStack(spacing: 4) {
+            Divider().overlay(.white.opacity(0.10))
+            VStack(spacing: 1) {
                 SidebarAction(title: auraText("Global memory", "공통 기억"), symbol: "brain.head.profile") { store.isShowingGlobalMemory = true }
                 SidebarAction(title: auraText("Settings", "설정"), symbol: "gearshape") { store.isShowingSettings = true }
             }
-            .padding(10)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 9)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(.ultraThinMaterial)
     }
 }
 
@@ -454,11 +481,10 @@ private struct SidebarAction: View {
             Label(title, systemImage: symbol)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 7)
         }
         .buttonStyle(.plain)
-        .background(.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 6))
     }
 }
 
@@ -837,6 +863,7 @@ private struct ArtifactPreviewPane: View {
     private var fileURL: URL { URL(fileURLWithPath: attachment.storedPath) }
     private var isHTML: Bool { ["html", "htm"].contains(fileURL.pathExtension.lowercased()) }
     private var isMarkdown: Bool { ["md", "markdown", "mdown"].contains(fileURL.pathExtension.lowercased()) }
+    private var isPresentation: Bool { ["ppt", "pptx"].contains(fileURL.pathExtension.lowercased()) }
     private var isImage: Bool { attachment.isImage }
 
     var body: some View {
@@ -878,6 +905,8 @@ private struct ArtifactPreviewPane: View {
                     HTMLFilePreview(url: fileURL)
                 } else if isMarkdown {
                     MarkdownFilePreview(url: fileURL)
+                } else if isPresentation {
+                    PresentationFilePreview(url: fileURL)
                 } else if isImage {
                     ImageFilePreview(url: fileURL)
                 } else {
@@ -901,7 +930,7 @@ private struct ArtifactPreviewPane: View {
     private var previewSymbol: String {
         switch fileURL.pathExtension.lowercased() {
         case "xlsx", "csv": return "tablecells"
-        case "pptx": return "rectangle.on.rectangle.angled"
+        case "ppt", "pptx": return "rectangle.on.rectangle.angled"
         case "docx", "rtf": return "doc.richtext"
         case "html", "htm": return "chevron.left.forwardslash.chevron.right"
         case "md", "markdown", "mdown": return "doc.text"
@@ -928,6 +957,161 @@ private struct MarkdownFilePreview: View {
         .task(id: url) {
             content = try? String(contentsOf: url, encoding: .utf8)
         }
+    }
+}
+
+private struct PresentationFilePreview: View {
+    let url: URL
+    @State private var renderedPDF: URL?
+    @State private var slideIndex = 0
+    @State private var slideCount = 0
+    @State private var isRendering = true
+
+    var body: some View {
+        Group {
+            if let renderedPDF {
+                VStack(spacing: 0) {
+                    HStack(spacing: 8) {
+                        Button { slideIndex = max(0, slideIndex - 1) } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(slideIndex == 0)
+                        .help(auraText("Previous slide", "이전 슬라이드"))
+
+                        Text(auraText("Slide \(slideIndex + 1) of \(max(1, slideCount))", "슬라이드 \(slideIndex + 1) / \(max(1, slideCount))"))
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .frame(minWidth: 88)
+
+                        Button { slideIndex = min(max(0, slideCount - 1), slideIndex + 1) } label: {
+                            Image(systemName: "chevron.right")
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(slideIndex >= max(0, slideCount - 1))
+                        .help(auraText("Next slide", "다음 슬라이드"))
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .background(.bar)
+
+                    PresentationPDFView(url: renderedPDF, slideIndex: $slideIndex, slideCount: $slideCount)
+                }
+            } else if isRendering {
+                ProgressView(auraText("Preparing slide preview…", "슬라이드 미리보기를 준비하는 중…"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                QuickLookFilePreview(url: url)
+            }
+        }
+        .task(id: url) {
+            isRendering = true
+            slideIndex = 0
+            slideCount = 0
+            renderedPDF = await Task.detached(priority: .utility) {
+                PresentationPreviewRenderer.renderPDF(for: url)
+            }.value
+            isRendering = false
+        }
+    }
+}
+
+private struct PresentationPDFView: NSViewRepresentable {
+    let url: URL
+    @Binding var slideIndex: Int
+    @Binding var slideCount: Int
+
+    func makeCoordinator() -> Coordinator { Coordinator(slideIndex: $slideIndex, slideCount: $slideCount) }
+
+    func makeNSView(context: Context) -> PDFView {
+        let view = PDFView()
+        view.autoScales = true
+        view.displayMode = .singlePage
+        view.displayDirection = .horizontal
+        context.coordinator.load(url, in: view)
+        return view
+    }
+
+    func updateNSView(_ view: PDFView, context: Context) {
+        context.coordinator.load(url, in: view)
+        guard let document = view.document, let page = document.page(at: slideIndex), view.currentPage !== page else { return }
+        view.go(to: page)
+    }
+
+    final class Coordinator {
+        private var observedURL: URL?
+        private var pageObserver: NSObjectProtocol?
+        private var slideIndex: Binding<Int>
+        private var slideCount: Binding<Int>
+
+        init(slideIndex: Binding<Int>, slideCount: Binding<Int>) {
+            self.slideIndex = slideIndex
+            self.slideCount = slideCount
+        }
+
+        deinit {
+            if let pageObserver { NotificationCenter.default.removeObserver(pageObserver) }
+        }
+
+        func load(_ url: URL, in view: PDFView) {
+            guard observedURL != url else { return }
+            observedURL = url
+            guard let document = PDFDocument(url: url) else { return }
+            view.document = document
+            slideCount.wrappedValue = document.pageCount
+            if let firstPage = document.page(at: 0) { view.go(to: firstPage) }
+
+            if let pageObserver { NotificationCenter.default.removeObserver(pageObserver) }
+            pageObserver = NotificationCenter.default.addObserver(
+                forName: Notification.Name.PDFViewPageChanged,
+                object: view,
+                queue: .main
+            ) { [weak self, weak view] _ in
+                guard let self, let view, let document = view.document, let page = view.currentPage else { return }
+                self.slideIndex.wrappedValue = document.index(for: page)
+            }
+        }
+    }
+}
+
+private enum PresentationPreviewRenderer {
+    static func renderPDF(for presentationURL: URL) -> URL? {
+        let fileManager = FileManager.default
+        let outputDirectory = fileManager.temporaryDirectory
+            .appendingPathComponent("AuraAI", isDirectory: true)
+            .appendingPathComponent("presentation-previews", isDirectory: true)
+        guard let soffice = sofficeURL() else { return nil }
+
+        do {
+            try fileManager.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+            let outputURL = outputDirectory
+                .appendingPathComponent(presentationURL.deletingPathExtension().lastPathComponent)
+                .appendingPathExtension("pdf")
+            if fileManager.fileExists(atPath: outputURL.path) { return outputURL }
+
+            let process = Process()
+            process.executableURL = soffice
+            process.arguments = ["--headless", "--convert-to", "pdf", "--outdir", outputDirectory.path, presentationURL.path]
+            process.standardOutput = Pipe()
+            process.standardError = Pipe()
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0 && fileManager.fileExists(atPath: outputURL.path) ? outputURL : nil
+        } catch {
+            return nil
+        }
+    }
+
+    private static func sofficeURL() -> URL? {
+        let paths = [
+            "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+            "/opt/homebrew/bin/soffice",
+            "/usr/local/bin/soffice"
+        ]
+        return paths.lazy.map(URL.init(fileURLWithPath:)).first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 }
 
@@ -1003,6 +1187,8 @@ private struct MessageBubble: View {
                     if message.role == .assistant {
                         GFMMarkdownMessageView(content: message.displayContent)
                             .padding(.top, 1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
                     } else {
                         Text(message.displayContent)
                             .padding(.horizontal, 12)
