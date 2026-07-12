@@ -32,4 +32,29 @@ The implementation now uses one continuous macOS window surface. The sidebar, co
 
 The compact screenshot contains a macOS removable-volume permission prompt from the temporary QA bundle. It is external to Aura and was excluded from layout judgment; the unobstructed regions verify the responsive shell and collapsed-sidebar state.
 
-final result: passed
+## Markdown rendering update
+
+- Source visual truth: `/var/folders/5g/2h9zh7t91939z858lxlltt740000gn/T/TemporaryItems/NSIRD_screencaptureui_yNZqCy/Screenshot 2026-07-12 at 3.47.45 PM.png`
+- Implementation verification: the exact Korean source, `**특정 이야기(신데렐라)**를`, now renders through a regression test as `<strong>특정 이야기(신데렐라)</strong>` with no literal `**` text. Inline code and fenced code remain literal.
+- Font and typography: bold output is mapped to the native system semibold face by `GFMMarkdownRenderer`.
+- Spacing and layout rhythm: unchanged; only inline emphasis tokens are normalized before GFM parsing.
+- Colors and visual tokens: unchanged; text remains `labelColor`.
+- Image quality and asset fidelity: no image assets affected.
+- Copy and content: the exact saved Korean message used in the screenshot is covered by the regression test.
+
+**Findings**
+
+- [P1] Live packaged-app visual capture is blocked.
+  Location: Korean release chat surface.
+  Evidence: the Mac was locked when the local-app validation workflow attempted to open the rebuilt app.
+  Impact: automated tests prove the parser result, but cannot replace a fresh visual screenshot of the packaged chat surface.
+  Fix: unlock the Mac and open the rebuilt Korean release once; the saved message will immediately render with bold emphasis and no literal markers.
+
+**Implementation Checklist**
+
+- Completed: normalize paired bold markers outside code before GFM parsing.
+- Completed: preserve literal markers inside inline and fenced code.
+- Completed: cover Korean particle-adjacent emphasis with a regression test.
+- Pending visual capture after the Mac is unlocked.
+
+final result: blocked

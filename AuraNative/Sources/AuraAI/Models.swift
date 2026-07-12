@@ -572,6 +572,9 @@ enum ToolProtocolSanitizer {
 /// Small local models sometimes escape their own Markdown punctuation, which
 /// leaves literal `**\\*\\*` markers in otherwise ordinary prose.
 enum MarkdownSanitizer {
+    private static let boldStartToken = "\u{E000}aura-bold-start\u{E001}"
+    private static let boldEndToken = "\u{E000}aura-bold-end\u{E001}"
+
     static func renderable(_ text: String) -> String {
         var isCodeFence = false
         return text
@@ -587,6 +590,87 @@ enum MarkdownSanitizer {
                     .replacingOccurrences(of: "\\_", with: "_")
             }
             .joined(separator: "\n")
+    }
+
+    /// Marked deliberately rejects an emphasis delimiter when a Korean
+    /// particle follows it without whitespace, for example `**신데렐라**를`.
+    /// Protect paired bold markers before parsing, then turn them back into
+    /// safe HTML after the Markdown parser has escaped the source text.
+    static func prepareForGFM(_ text: String) -> String {
+        var isCodeFence = false
+        return renderable(text)
+            .components(separatedBy: .newlines)
+            .map { line in
+                if line.trimmingCharacters(in: .whitespaces).hasPrefix("```") {
+                    isCodeFence.toggle()
+                    return line
+                }
+                guard !isCodeFence else { return line }
+                return replacePairedBoldMarkers(in: line)
+            }
+            .joined(separator: "\n")
+    }
+
+    static func restoreGFMBoldTokens(in html: String) -> String {
+        html
+            .replacingOccurrences(of: boldStartToken, with: "<strong>")
+            .replacingOccurrences(of: boldEndToken, with: "</strong>")
+    }
+
+    private static func replacePairedBoldMarkers(in line: String) -> String {
+        var result = ""
+        var index = line.startIndex
+        var isInlineCode = false
+
+        while index < line.endIndex {
+            if line[index] == "`" {
+                isInlineCode.toggle()
+                result.append(line[index])
+                index = line.index(after: index)
+                continue
+            }
+
+            if !isInlineCode,
+               line[index...].hasPrefix("**"),
+               let nextMarker = nextBoldMarker(in: line, after: line.index(index, offsetBy: 2)) {
+                result += boldStartToken
+                index = line.index(index, offsetBy: 2)
+
+                while index < nextMarker {
+                    result.append(line[index])
+                    index = line.index(after: index)
+                }
+
+                result += boldEndToken
+                index = line.index(nextMarker, offsetBy: 2)
+                continue
+            }
+
+            result.append(line[index])
+            index = line.index(after: index)
+        }
+
+        return result
+    }
+
+    private static func nextBoldMarker(in line: String, after start: String.Index) -> String.Index? {
+        var index = start
+        var isInlineCode = false
+
+        while index < line.endIndex {
+            if line[index] == "`" {
+                isInlineCode.toggle()
+                index = line.index(after: index)
+                continue
+            }
+
+            if !isInlineCode, line[index...].hasPrefix("**") {
+                return index
+            }
+            index = line.index(after: index)
+        }
+
+        return nil
     }
 }
 

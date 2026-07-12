@@ -97,6 +97,24 @@ final class ToolCallTests: XCTestCase {
         XCTAssertEqual(MarkdownSanitizer.renderable("```\n\\* literal code\n```"), "```\n\\* literal code\n```")
     }
 
+    func testGFMRendererConsumesBoldMarkersInKoreanText() {
+        let source = "저희는 **특정 이야기(신데렐라)**를 논의했습니다."
+        let html = GFMMarkdownRenderer.html(from: source)
+        let rendered = GFMMarkdownRenderer.attributed(from: source)
+
+        XCTAssertTrue(html?.contains("<strong>특정 이야기(신데렐라)</strong>") == true, html ?? "nil")
+        XCTAssertFalse(rendered.string.contains("**"))
+        XCTAssertTrue(rendered.string.contains("특정 이야기(신데렐라)"))
+    }
+
+    func testGFMNormalizerKeepsBoldMarkersLiteralInsideCode() {
+        let html = GFMMarkdownRenderer.html(from: "`**literal**`\n\n```\n**also literal**\n```")
+
+        XCTAssertTrue(html?.contains("**literal**") == true)
+        XCTAssertFalse(html?.contains("<strong>literal</strong>") == true)
+        XCTAssertTrue(html?.contains("**also literal**") == true)
+    }
+
     func testGFMRendererSupportsTablesAndRejectsRawHTML() {
         let html = GFMMarkdownRenderer.html(from: "| Name | Role |\n| --- | --- |\n| Ella | Hero |\n\n<script>alert(1)</script>")
 

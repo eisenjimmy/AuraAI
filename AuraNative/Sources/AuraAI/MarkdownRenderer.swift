@@ -17,7 +17,7 @@ enum GFMMarkdownRenderer {
 
     static func html(from source: String) -> String? {
         guard !markedSource.isEmpty else { return nil }
-        let markdown = MarkdownSanitizer.renderable(source)
+        let markdown = MarkdownSanitizer.prepareForGFM(source)
         guard let encoded = try? JSONEncoder().encode(markdown),
               let literal = String(data: encoded, encoding: .utf8) else { return nil }
         let context = JSContext()
@@ -27,7 +27,7 @@ enum GFMMarkdownRenderer {
         context?.evaluateScript("marked.use({ gfm: true, breaks: false, renderer: { html() { return ''; } } });")
         let result = context?.evaluateScript("marked.parse(\(literal), { gfm: true, breaks: false });")?.toString()
         guard !failed, let result, !result.isEmpty else { return nil }
-        return result
+        return MarkdownSanitizer.restoreGFMBoldTokens(in: result)
     }
 
     static func attributed(from source: String) -> NSAttributedString {
