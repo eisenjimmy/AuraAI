@@ -213,9 +213,9 @@ struct AuraWorkspaceView: View {
                 if let attachment = store.previewAttachment {
                     HSplitView {
                         ChatView(member: member)
-                            .frame(minWidth: 520, idealWidth: 860)
+                            .frame(minWidth: 360, idealWidth: 700)
                         ArtifactPreviewPane(attachment: attachment)
-                            .frame(minWidth: 340, idealWidth: 520)
+                            .frame(minWidth: 240, idealWidth: 460)
                     }
                 } else {
                     ChatView(member: member)
@@ -225,7 +225,7 @@ struct AuraWorkspaceView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
-        .navigationSplitViewColumnWidth(min: 300, ideal: 340, max: 420)
+        .navigationSplitViewColumnWidth(min: 220, ideal: 300, max: 380)
         .sheet(isPresented: $isShowingAddMember) { AddMemberSheet() }
         .sheet(isPresented: $store.isShowingSettings) { SettingsView() }
         .sheet(isPresented: $store.isShowingGlobalMemory) {
@@ -687,6 +687,7 @@ private struct ArtifactPreviewPane: View {
 
     private var fileURL: URL { URL(fileURLWithPath: attachment.storedPath) }
     private var isHTML: Bool { ["html", "htm"].contains(fileURL.pathExtension.lowercased()) }
+    private var isMarkdown: Bool { ["md", "markdown", "mdown"].contains(fileURL.pathExtension.lowercased()) }
     private var isImage: Bool { attachment.isImage }
 
     var body: some View {
@@ -726,6 +727,8 @@ private struct ArtifactPreviewPane: View {
             Group {
                 if isHTML {
                     HTMLFilePreview(url: fileURL)
+                } else if isMarkdown {
+                    MarkdownFilePreview(url: fileURL)
                 } else if isImage {
                     ImageFilePreview(url: fileURL)
                 } else {
@@ -752,7 +755,29 @@ private struct ArtifactPreviewPane: View {
         case "pptx": return "rectangle.on.rectangle.angled"
         case "docx", "rtf": return "doc.richtext"
         case "html", "htm": return "chevron.left.forwardslash.chevron.right"
+        case "md", "markdown", "mdown": return "doc.text"
         default: return "doc"
+        }
+    }
+}
+
+private struct MarkdownFilePreview: View {
+    let url: URL
+    @State private var content: String?
+
+    var body: some View {
+        ScrollView {
+            if let content {
+                GFMMarkdownMessageView(content: content)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(22)
+            } else {
+                ContentUnavailableView(auraText("Markdown unavailable", "Markdown을 열 수 없습니다"), systemImage: "doc.text")
+                    .frame(maxWidth: .infinity, minHeight: 220)
+            }
+        }
+        .task(id: url) {
+            content = try? String(contentsOf: url, encoding: .utf8)
         }
     }
 }
