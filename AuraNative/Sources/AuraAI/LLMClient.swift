@@ -21,6 +21,57 @@ enum LLMClientError: LocalizedError {
 }
 
 struct OpenAICompatibleClient {
+    func stream(
+        messages: [ModelMessage],
+        configuration: ProviderConfiguration,
+        onDelta: @escaping @MainActor (String) -> Void
+    ) async throws -> String {
+        if configuration.kind == .anthropic {
+            return try await AnthropicMessagesClient().stream(messages: messages, configuration: configuration, onDelta: onDelta)
+        }
+        guard let url = configuration.chatURL else { throw LLMClientError.invalidEndpoint }
+        for attempt in 0..<5 {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 180
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if configuration.kind.isCloud, !configuration.apiKey.isEmpty {
+                request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
+            }
+            request.httpBody = try JSONEncoder().encode(ChatRequest(model: configuration.model, messages: messages, stream: true))
+
+            let (bytes, response) = try await URLSession.shared.bytes(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                throw LLMClientError.badResponse("The model endpoint did not return HTTP.")
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                let data = try await Self.collect(bytes)
+                if http.statusCode == 503, Self.isModelLoading(data), attempt < 4 {
+                    try Task.checkCancellation()
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    continue
+                }
+                if http.statusCode == 503, Self.isModelLoading(data) {
+                    throw LLMClientError.modelStillLoading
+                }
+                let detail = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
+                throw LLMClientError.badResponse("Model request failed (\(http.statusCode)): \(detail.prefix(600))")
+            }
+
+            var result = ""
+            for try await line in bytes.lines {
+                guard line.hasPrefix("data:") else { continue }
+                let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                guard payload != "[DONE]", let delta = Self.streamDelta(from: Data(payload.utf8)) else { continue }
+                result += delta
+                await onDelta(delta)
+            }
+            guard !result.isEmpty else { throw LLMClientError.missingContent }
+            return result
+        }
+        throw LLMClientError.modelStillLoading
+    }
+
     func complete(messages: [ModelMessage], configuration: ProviderConfiguration) async throws -> String {
         if configuration.kind == .anthropic {
             return try await AnthropicMessagesClient().complete(messages: messages, configuration: configuration)
@@ -66,6 +117,17 @@ struct OpenAICompatibleClient {
         return value.contains("loading model") || value.contains("model is loading")
     }
 
+    static func streamDelta(from data: Data) -> String? {
+        let chunk = try? JSONDecoder().decode(StreamChunk.self, from: data)
+        return chunk?.choices.first?.delta.content
+    }
+
+    private static func collect(_ bytes: URLSession.AsyncBytes) async throws -> Data {
+        var data = Data()
+        for try await byte in bytes { data.append(byte) }
+        return data
+    }
+
     private struct ChatRequest: Encodable {
         var model: String
         var messages: [ModelMessage]
@@ -79,31 +141,52 @@ struct OpenAICompatibleClient {
         }
         var choices: [Choice]
     }
+
+    private struct StreamChunk: Decodable {
+        struct Choice: Decodable {
+            struct Delta: Decodable { var content: String? }
+            var delta: Delta
+        }
+        var choices: [Choice]
+    }
 }
 
 private struct AnthropicMessagesClient {
-    func complete(messages: [ModelMessage], configuration: ProviderConfiguration) async throws -> String {
-        guard let url = configuration.messagesURL else { throw LLMClientError.invalidEndpoint }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 180
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(configuration.apiKey, forHTTPHeaderField: "x-api-key")
-        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+    func stream(
+        messages: [ModelMessage],
+        configuration: ProviderConfiguration,
+        onDelta: @escaping @MainActor (String) -> Void
+    ) async throws -> String {
+        guard configuration.messagesURL != nil else { throw LLMClientError.invalidEndpoint }
+        let request = request(messages: messages, configuration: configuration, streaming: true)
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw LLMClientError.badResponse("The Claude endpoint did not return HTTP.")
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let data = try await collect(bytes)
+            let detail = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
+            throw LLMClientError.badResponse("Model request failed (\(http.statusCode)): \(detail.prefix(600))")
+        }
 
-        let system = messages
-            .filter { $0.role == "system" }
-            .map(\.content)
-            .joined(separator: "\n\n")
-        let conversation = messages
-            .filter { $0.role != "system" }
-            .map(AnthropicMessage.init)
-        request.httpBody = try JSONEncoder().encode(AnthropicRequest(
-            model: configuration.model,
-            maxTokens: 4_096,
-            system: system.isEmpty ? nil : system,
-            messages: conversation
-        ))
+        var result = ""
+        for try await line in bytes.lines {
+            guard line.hasPrefix("data:") else { continue }
+            let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+            guard let event = try? JSONDecoder().decode(AnthropicStreamEvent.self, from: Data(payload.utf8)),
+                  event.type == "content_block_delta",
+                  let delta = event.delta?.text,
+                  !delta.isEmpty else { continue }
+            result += delta
+            await onDelta(delta)
+        }
+        guard !result.isEmpty else { throw LLMClientError.missingContent }
+        return result
+    }
+
+    func complete(messages: [ModelMessage], configuration: ProviderConfiguration) async throws -> String {
+        guard configuration.messagesURL != nil else { throw LLMClientError.invalidEndpoint }
+        let request = request(messages: messages, configuration: configuration, streaming: false)
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -119,17 +202,49 @@ private struct AnthropicMessagesClient {
         return content
     }
 
+    private func request(messages: [ModelMessage], configuration: ProviderConfiguration, streaming: Bool) -> URLRequest {
+        let system = messages
+            .filter { $0.role == "system" }
+            .map(\.content)
+            .joined(separator: "\n\n")
+        let conversation = messages
+            .filter { $0.role != "system" }
+            .map(AnthropicMessage.init)
+        var request = URLRequest(url: configuration.messagesURL!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 180
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(configuration.apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.httpBody = try? JSONEncoder().encode(AnthropicRequest(
+            model: configuration.model,
+            maxTokens: 4_096,
+            system: system.isEmpty ? nil : system,
+            messages: conversation,
+            stream: streaming
+        ))
+        return request
+    }
+
+    private func collect(_ bytes: URLSession.AsyncBytes) async throws -> Data {
+        var data = Data()
+        for try await byte in bytes { data.append(byte) }
+        return data
+    }
+
     private struct AnthropicRequest: Encodable {
         var model: String
         var maxTokens: Int
         var system: String?
         var messages: [AnthropicMessage]
+        var stream: Bool
 
         private enum CodingKeys: String, CodingKey {
             case model
             case maxTokens = "max_tokens"
             case system
             case messages
+            case stream
         }
     }
 
@@ -189,5 +304,11 @@ private struct AnthropicMessagesClient {
         }
 
         var content: [Content]
+    }
+
+    private struct AnthropicStreamEvent: Decodable {
+        struct Delta: Decodable { var text: String? }
+        var type: String
+        var delta: Delta?
     }
 }

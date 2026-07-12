@@ -553,6 +553,13 @@ enum ToolProtocolSanitizer {
         containsToolCall(in: text) || text.range(of: "<tool_result", options: [.caseInsensitive]) != nil
     }
 
+    /// Holds back the first few streamed characters while Aura determines
+    /// whether they begin an internal tool envelope.
+    static func isPotentialInternalProtocolPrefix(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return ["<tool_call", "<tool_result"].contains { $0.hasPrefix(lower) }
+    }
+
     static func userVisibleText(from text: String) -> String {
         guard containsInternalProtocol(in: text) else { return text }
         return auraText(

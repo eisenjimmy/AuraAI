@@ -21,9 +21,11 @@ struct AgentHarness {
         skills: AgentSkillSettings,
         requestedArtifact: ArtifactIntent?,
         attachments: [ChatAttachment],
+        memoryUpdate: MemoryUpdate? = nil,
         requestFolder: @escaping @MainActor (String) async -> URL?,
         approval: @escaping @MainActor (AgentApproval) async -> Bool,
-        onEvent: @escaping @MainActor (AgentHarnessEvent) -> Void = { _ in }
+        onEvent: @escaping @MainActor (AgentHarnessEvent) -> Void = { _ in },
+        onTextDelta: @escaping @MainActor (String) -> Void = { _ in }
     ) async throws -> AgentRunResult {
         var generatedAttachments: [ChatAttachment] = []
         var events: [AgentHarnessEvent] = []
@@ -77,7 +79,8 @@ struct AgentHarness {
             authorizedFolders: readableFolders,
             skills: skills,
             requiredFolder: requestedFolder,
-            attachments: attachments
+            attachments: attachments,
+            memoryUpdate: memoryUpdate
         )
         if let initialFolderResult {
             transcript.append(internalToolResult(initialFolderResult))
@@ -92,7 +95,12 @@ struct AgentHarness {
             )
             events.append(inferring)
             await onEvent(inferring)
-            let reply = try await client.complete(messages: transcript, configuration: configuration)
+            let streamGate = await MainActor.run { StreamVisibilityGate(onTextDelta: onTextDelta) }
+            await streamGate.reset()
+            let reply = try await client.stream(messages: transcript, configuration: configuration) { @MainActor delta in
+                streamGate.receive(delta)
+            }
+            await streamGate.finish()
             guard let call = ToolCall.parse(reply) else {
                 if let requestedArtifact, !skills.isEnabled(requestedArtifact.skill) {
                     return AgentRunResult(
@@ -260,7 +268,8 @@ struct AgentHarness {
         authorizedFolders: [URL],
         skills: AgentSkillSettings,
         requiredFolder: String?,
-        attachments: [ChatAttachment]
+        attachments: [ChatAttachment],
+        memoryUpdate: MemoryUpdate?
     ) -> [ModelMessage] {
         let workspaceDescription = workspace?.path ?? "No workspace selected. Do not request file or shell tools."
         let folderDescription = authorizedFolders.isEmpty
@@ -290,7 +299,7 @@ struct AgentHarness {
         \(targetInstruction)
         You may inspect the selected workspace and only the additional folders above with list_files and read_file. You cannot see Downloads, Desktop, Documents, or any other folder unless it is explicitly approved. If the user asks about one of those folders, call request_folder_access first. Do not substitute the workspace for the requested folder.
         File writes and shell commands remain limited to the selected workspace. Computer control requires visible user approval. Never claim you saw, read, or changed anything unless a tool result confirms the exact target.
-        Aura keeps durable private Markdown memories for each friend. Use recalled character memory as known context. When the user asks you to remember a fact, acknowledge that it is saved; do not claim that Aura is inherently stateless.
+        Aura keeps durable private Markdown memories for each friend. Use recalled character memory as known context. A separate private-memory curator handles new memories. Never say a memory was saved unless its confirmed curator status is provided below.
 
         To use one tool, reply with only:
         <tool_call>{"name":"\(toolNames)","arguments":{...}}</tool_call>
@@ -307,6 +316,9 @@ struct AgentHarness {
         }
         if !memberMemory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             messages.append(ModelMessage(role: "system", content: "Your private character Markdown memory:\n\(memberMemory)"))
+        }
+        if let memoryUpdate {
+            messages.append(ModelMessage(role: "system", content: memoryUpdate.modelContext))
         }
         messages += history.map {
             ModelMessage(
@@ -347,6 +359,54 @@ struct AgentHarness {
         default:
             return nil
         }
+    }
+}
+
+/// The model uses private XML-like messages to request tools. A response can
+/// begin streaming before Aura knows which kind it is, so keep those control
+/// messages out of the visible chat entirely.
+@MainActor
+private final class StreamVisibilityGate {
+    private let onTextDelta: (String) -> Void
+    private var pending = ""
+    private var fullResponse = ""
+    private var suppressesResponse = false
+
+    init(onTextDelta: @escaping (String) -> Void) {
+        self.onTextDelta = onTextDelta
+    }
+
+    func reset() {
+        pending = ""
+        fullResponse = ""
+        suppressesResponse = false
+        onTextDelta("")
+    }
+
+    func receive(_ delta: String) {
+        guard !suppressesResponse else { return }
+        pending += delta
+        fullResponse += delta
+
+        if ToolProtocolSanitizer.containsInternalProtocol(in: fullResponse) {
+            suppressesResponse = true
+            pending = ""
+            onTextDelta("")
+            return
+        }
+
+        if ToolProtocolSanitizer.isPotentialInternalProtocolPrefix(pending) {
+            return
+        }
+
+        onTextDelta(pending)
+        pending = ""
+    }
+
+    func finish() {
+        guard !suppressesResponse, !pending.isEmpty else { return }
+        onTextDelta(pending)
+        pending = ""
     }
 }
 

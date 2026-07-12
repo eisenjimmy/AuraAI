@@ -14,6 +14,8 @@ final class AuraStore: ObservableObject {
     @Published var isExtractingAttachments = false
     @Published var isWorking = false
     @Published var activeWorkingMemberID: UUID?
+    @Published var streamingResponse = ""
+    @Published var streamingMemberID: UUID?
     @Published var harnessEvents: [AgentHarnessEvent] = []
     @Published var contextStatus = ConversationContextStatus(includedSince: nil, estimatedTokens: 0, droppedMessageCount: 0)
     @Published var previewAttachment: ChatAttachment?
@@ -51,6 +53,7 @@ final class AuraStore: ObservableObject {
     var skillSettings: AgentSkillSettings { settings.skillSettings ?? AgentSkillSettings() }
     func effectiveSkills(for member: TeamMember) -> AgentSkillSettings { skillSettings.limited(to: member) }
     func isWorking(for member: TeamMember) -> Bool { isWorking && activeWorkingMemberID == member.id }
+    func isStreaming(for member: TeamMember) -> Bool { streamingMemberID == member.id && !streamingResponse.isEmpty }
 
     func applyProviderPreset(_ kind: ProviderKind) {
         settings.provider.kind = kind
@@ -300,8 +303,7 @@ final class AuraStore: ObservableObject {
 
     private func memberMemoryContext(for member: TeamMember, query: String) -> String {
         let vault = persistence.memberMemoryVault(member.id)
-        _ = vault.captureIfRequested(query)
-        let notes = vault.recall(query)
+        let notes = MemorySubagent.recall(query: query, from: vault)
         let manualMemory = memberMemory(member)
         let recalled = notes.map { "- \($0.body)" }.joined(separator: "\n")
         return [
@@ -354,12 +356,12 @@ final class AuraStore: ObservableObject {
         persistence.saveConversation(messages, memberID: member.id)
         isWorking = true
         activeWorkingMemberID = member.id
+        streamingMemberID = member.id
+        streamingResponse = ""
         harnessEvents = []
 
         let history = messages.dropLast()
         let config = settings.provider
-        let globalMemory = globalMemoryContext(query: text)
-        let privateMemory = memberMemoryContext(for: member, query: text)
         let workspace = settings.workspacePath.isEmpty ? nil : URL(fileURLWithPath: settings.workspacePath)
         let authorizedFolders = settings.authorizedFolderPaths.map { URL(fileURLWithPath: $0) }
         let skills = effectiveSkills(for: member)
@@ -367,10 +369,19 @@ final class AuraStore: ObservableObject {
         // includes attachment contents, which may mention unrelated formats.
         let requestedArtifact = ArtifactIntent.requested(in: displayText)
         let boundedHistory = ConversationContextWindow.select(from: Array(history))
+        let conversationSnapshot = messages
         contextStatus = boundedHistory.status
 
         Task {
             do {
+                let memoryUpdate = await updatePrivateMemoryIfRequested(
+                    message: displayText,
+                    conversation: conversationSnapshot,
+                    member: member,
+                    configuration: config
+                )
+                let globalMemory = globalMemoryContext(query: text)
+                let privateMemory = memberMemoryContext(for: member, query: text)
                 let response: String
                 let responseAttachments: [ChatAttachment]
                 let result = try await AgentHarness().run(
@@ -385,13 +396,26 @@ final class AuraStore: ObservableObject {
                     skills: skills,
                     requestedArtifact: requestedArtifact,
                     attachments: attachments,
+                    memoryUpdate: memoryUpdate,
                     requestFolder: { name in await self.requestFolderAccess(named: name) },
                     approval: { approval in await self.requestApproval(approval) },
-                    onEvent: { event in self.harnessEvents.append(event) }
+                    onEvent: { event in self.harnessEvents.append(event) },
+                    onTextDelta: { delta in
+                        guard self.streamingMemberID == member.id else { return }
+                        if delta.isEmpty {
+                            self.streamingResponse = ""
+                        } else {
+                            self.streamingResponse += delta
+                        }
+                    }
                 )
                 response = result.response
                 responseAttachments = result.attachments
                 let restored = privacyReview.map { privacyFilter.restore(response, review: $0) } ?? response
+                if streamingMemberID == member.id {
+                    streamingResponse = ""
+                    streamingMemberID = nil
+                }
                 messages.append(ConversationMessage(role: .assistant, content: restored, attachments: responseAttachments))
                 persistence.saveConversation(messages, memberID: member.id)
                 if selectedMemberID == member.id {
@@ -400,8 +424,62 @@ final class AuraStore: ObservableObject {
             } catch {
                 errorMessage = error.localizedDescription
             }
+            if streamingMemberID == member.id {
+                streamingResponse = ""
+                streamingMemberID = nil
+            }
             isWorking = false
             if activeWorkingMemberID == member.id { activeWorkingMemberID = nil }
+        }
+    }
+
+    private func updatePrivateMemoryIfRequested(
+        message: String,
+        conversation: [ConversationMessage],
+        member: TeamMember,
+        configuration: ProviderConfiguration
+    ) async -> MemoryUpdate? {
+        guard MemorySubagent.isCaptureRequest(message) else { return nil }
+        harnessEvents.append(AgentHarnessEvent(
+            kind: .toolRequested,
+            step: 0,
+            title: auraText("Reviewing what to remember", "기억할 내용을 정리하는 중"),
+            detail: auraText("Saving only supported, durable details from this conversation.", "대화에서 확인된 오래 남길 정보만 골라 저장합니다.")
+        ))
+        do {
+            let candidates = try await MemorySubagent().extract(
+                conversation: conversation,
+                request: message,
+                configuration: configuration
+            )
+            guard !candidates.isEmpty else {
+                harnessEvents.append(AgentHarnessEvent(
+                    kind: .observation,
+                    step: 0,
+                    title: auraText("No durable detail to save", "저장할 구체적인 정보가 없습니다"),
+                    detail: auraText("I did not save the instruction itself.", "기억해 달라는 요청 문장 자체는 저장하지 않았습니다.")
+                ))
+                return MemoryUpdate(saved: [])
+            }
+            let vault = persistence.memberMemoryVault(member.id)
+            for candidate in candidates {
+                _ = vault.save(body: candidate.text, retention: candidate.retention)
+            }
+            harnessEvents.append(AgentHarnessEvent(
+                kind: .observation,
+                step: 0,
+                title: auraText("Private memory updated", "개인 기억을 업데이트했습니다"),
+                detail: candidates.map(\.text).joined(separator: " ")
+            ))
+            return MemoryUpdate(saved: candidates)
+        } catch {
+            harnessEvents.append(AgentHarnessEvent(
+                kind: .failed,
+                step: 0,
+                title: auraText("Memory was not updated", "기억을 업데이트하지 못했습니다"),
+                detail: auraText("The chat can continue, but no unverified memory was saved.", "대화는 계속할 수 있지만 검증되지 않은 기억은 저장하지 않았습니다.")
+            ))
+            return MemoryUpdate(saved: [])
         }
     }
 

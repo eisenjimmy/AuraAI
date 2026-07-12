@@ -85,4 +85,10 @@ final class ToolCallTests: XCTestCase {
         XCTAssertFalse(message.displayContent.contains("<tool_result"))
         XCTAssertFalse(message.modelContent.contains("<tool_result"))
     }
+
+    func testRecognizesAPartialInternalProtocolPrefix() {
+        XCTAssertTrue(ToolProtocolSanitizer.isPotentialInternalProtocolPrefix("<tool_"))
+        XCTAssertTrue(ToolProtocolSanitizer.isPotentialInternalProtocolPrefix("<TOOL_RESULT"))
+        XCTAssertFalse(ToolProtocolSanitizer.isPotentialInternalProtocolPrefix("Here is the result"))
+    }
 }

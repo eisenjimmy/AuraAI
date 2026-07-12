@@ -8,6 +8,12 @@ final class LLMClientTests: XCTestCase {
         XCTAssertFalse(OpenAICompatibleClient.isModelLoading(Data("unknown model".utf8)))
     }
 
+    func testExtractsOpenAIStreamingTextDelta() {
+        let chunk = Data(#"{"choices":[{"delta":{"content":"Hello"}}]}"#.utf8)
+        XCTAssertEqual(OpenAICompatibleClient.streamDelta(from: chunk), "Hello")
+        XCTAssertNil(OpenAICompatibleClient.streamDelta(from: Data(#"{"choices":[{"delta":{}}]}"#.utf8)))
+    }
+
     func testKoreanEditionInstructionRequiresKoreanReply() {
         XCTAssertTrue(AuraEdition.korean.responseLanguageInstruction.contains("항상 자연스럽고 완전한 한국어"))
     }

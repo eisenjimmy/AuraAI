@@ -431,6 +431,13 @@ private struct ChatView: View {
                             MessageBubble(message: message, member: member)
                                 .id(message.id)
                         }
+                        if store.isStreaming(for: member) {
+                            MessageBubble(
+                                message: ConversationMessage(role: .assistant, content: store.streamingResponse),
+                                member: member
+                            )
+                            .id("streaming")
+                        }
                         if store.isWorking(for: member) {
                             WorkingActivityView(member: member, events: store.harnessEvents)
                             .id("working")
@@ -449,6 +456,9 @@ private struct ChatView: View {
                 }
                 .onChange(of: store.harnessEvents.count) { _, _ in
                     if store.isWorking(for: member) { proxy.scrollTo("working", anchor: .bottom) }
+                }
+                .onChange(of: store.streamingResponse) { _, _ in
+                    if store.isStreaming(for: member) { proxy.scrollTo("streaming", anchor: .bottom) }
                 }
             }
 

@@ -1,5 +1,21 @@
 import Foundation
 
+struct MemoryCandidate: Equatable, Sendable {
+    var text: String
+    var retention: MemoryRetention
+}
+
+struct MemoryUpdate: Equatable, Sendable {
+    var saved: [MemoryCandidate]
+
+    var modelContext: String {
+        guard !saved.isEmpty else {
+            return "The private-memory curator found no durable, supported fact to save. Do not say that a memory was saved."
+        }
+        return "The private-memory curator saved these confirmed private memories:\n" + saved.map { "- \($0.text)" }.joined(separator: "\n")
+    }
+}
+
 struct MarkdownMemoryNote: Equatable {
     var slug: String
     var title: String
@@ -31,6 +47,112 @@ enum MemoryRetention: String, CaseIterable, Identifiable {
     }
 }
 
+/// A focused, independent worker for extracting and recalling character
+/// memories. It never treats the user's save instruction as the memory.
+struct MemorySubagent {
+    private let client = OpenAICompatibleClient()
+
+    static func isCaptureRequest(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("remember") || lower.contains("keep in mind") || lower.contains("note that")
+            || text.contains("기억해") || text.contains("기억해줘") || text.contains("기억해 둬") || text.contains("알아둬")
+    }
+
+    static func recall(query: String, from vault: MarkdownMemoryVault, limit: Int = 4) -> [MarkdownMemoryNote] {
+        if isRecallRequest(query) {
+            return Array(vault.list().prefix(limit))
+        }
+        return vault.recall(query, limit: limit)
+    }
+
+    func extract(
+        conversation: [ConversationMessage],
+        request: String,
+        configuration: ProviderConfiguration
+    ) async throws -> [MemoryCandidate] {
+        guard Self.isCaptureRequest(request) else { return [] }
+        let transcript = conversation
+            .suffix(16)
+            .filter { $0.role == .user }
+            .map { "User: \($0.displayContent)" }
+            .joined(separator: "\n")
+        guard !transcript.isEmpty else { return [] }
+
+        let instructions = """
+        You are Aura's private-memory curator, a separate background worker.
+        Extract only durable, explicit facts about the user, their stated preferences, or a lasting project context from the user's messages below. Never save a request to remember, a greeting, a question, a model response, a temporary task, or anything inferred rather than stated. Every fact must stand alone and be supported verbatim by the transcript.
+
+        Return strict JSON only in this form:
+        {"facts":[{"text":"The user lives in Dix Hills, NY.","retention":"long_term"}]}
+
+        Use retention "seven_days" only for clearly temporary information, "thirty_days" for this-month information, and "long_term" otherwise. Return {"facts":[]} when no durable fact is supported. Keep at most four facts. Preserve the user's language where practical.
+
+        User messages:
+        \(transcript)
+        """
+        let reply = try await client.complete(
+            messages: [ModelMessage(role: "system", content: instructions), ModelMessage(role: "user", content: request)],
+            configuration: configuration
+        )
+        return Self.parse(reply: reply, excluding: request)
+    }
+
+    private static func parse(reply: String, excluding request: String) -> [MemoryCandidate] {
+        struct Payload: Decodable {
+            struct Fact: Decodable {
+                var text: String
+                var retention: String?
+            }
+            var facts: [Fact]
+        }
+        let trimmed = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+        let json: String
+        if let start = trimmed.firstIndex(of: "{"), let end = trimmed.lastIndex(of: "}") {
+            json = String(trimmed[start...end])
+        } else {
+            return []
+        }
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: Data(json.utf8)) else { return [] }
+        let normalizedRequest = normalize(request)
+        let candidates: [MemoryCandidate] = payload.facts.compactMap { fact -> MemoryCandidate? in
+            let text = fact.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard isSafeFact(text, excluding: normalizedRequest) else { return nil }
+            return MemoryCandidate(text: text, retention: retention(for: fact.retention))
+        }
+        let unique = candidates.reduce(into: [MemoryCandidate]()) { result, candidate in
+            if !result.contains(where: { normalize($0.text) == normalize(candidate.text) }) {
+                result.append(candidate)
+            }
+        }
+        return Array(unique.prefix(4))
+    }
+
+    private static func isRecallRequest(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("what do you remember") || lower.contains("remember about me")
+            || text.contains("무엇을 기억") || text.contains("기억하고 있는") || text.contains("기억해?")
+    }
+
+    private static func retention(for value: String?) -> MemoryRetention {
+        switch value?.lowercased() {
+        case "seven_days": return .sevenDays
+        case "thirty_days": return .thirtyDays
+        default: return .longTerm
+        }
+    }
+
+    private static func isSafeFact(_ text: String, excluding request: String) -> Bool {
+        let normalized = normalize(text)
+        guard text.count >= 8, text.count <= 280, normalized != request else { return false }
+        let blocked = ["remember", "keep in mind", "note that", "기억해", "기억해줘", "저장해", "<tool", "{"]
+        return !blocked.contains { normalized.contains($0) }
+    }
+
+    private static func normalize(_ text: String) -> String {
+        text.lowercased().components(separatedBy: .whitespacesAndNewlines).joined(separator: " ")
+    }
+}
+
 /// Obsidian-compatible memory notes. Each friend owns a separate vault.
 final class MarkdownMemoryVault {
     private let root: URL
@@ -46,8 +168,7 @@ final class MarkdownMemoryVault {
 
     @discardableResult
     func captureIfRequested(_ message: String) -> MarkdownMemoryNote? {
-        guard isExplicitMemoryRequest(message) else { return nil }
-        let body = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard MemorySubagent.isCaptureRequest(message), let body = fallbackFact(from: message) else { return nil }
         guard !body.isEmpty else { return nil }
 
         return save(body: body, retention: inferredRetention(for: body))
@@ -186,10 +307,16 @@ final class MarkdownMemoryVault {
         root.appendingPathComponent("\(slug).md")
     }
 
-    private func isExplicitMemoryRequest(_ text: String) -> Bool {
+    private func fallbackFact(from text: String) -> String? {
+        let englishMarkers = ["remember that ", "note that ", "keep in mind that "]
         let lower = text.lowercased()
-        return lower.contains("remember") || lower.contains("keep in mind") || lower.contains("note that")
-            || text.contains("기억해") || text.contains("기억해줘") || text.contains("기억해 둬") || text.contains("알아둬")
+        for marker in englishMarkers {
+            if let range = lower.range(of: marker) {
+                return String(text[range.upperBound...])
+                    .trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+            }
+        }
+        return nil
     }
 
     private func inferredRetention(for text: String) -> MemoryRetention {
