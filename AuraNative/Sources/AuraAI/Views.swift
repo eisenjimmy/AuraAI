@@ -625,33 +625,44 @@ private struct ArtifactPreviewPane: View {
 
     private var fileURL: URL { URL(fileURLWithPath: attachment.storedPath) }
     private var isHTML: Bool { ["html", "htm"].contains(fileURL.pathExtension.lowercased()) }
+    private var isImage: Bool { attachment.isImage }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 Image(systemName: previewSymbol)
                     .foregroundStyle(AuraTheme.accent)
                 Text(attachment.fileName)
                     .font(.headline)
                     .lineLimit(1)
-                Spacer()
-                Button { store.export(attachment) } label: { Image(systemName: "square.and.arrow.down") }
-                    .buttonStyle(.plain)
-                    .help(auraText("Export a copy", "사본 내보내기"))
-                ShareLink(item: fileURL) { Image(systemName: "square.and.arrow.up") }
-                    .buttonStyle(.plain)
-                    .help(auraText("Share, including Messages", "공유하기 및 메시지"))
-                Button { store.previewAttachment = nil } label: { Image(systemName: "xmark") }
-                    .buttonStyle(.plain)
-                    .help(auraText("Close preview", "미리보기 닫기"))
+                    .truncationMode(.middle)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 3) {
+                    previewButton("square.and.arrow.down", help: auraText("Export a copy", "사본 내보내기")) {
+                        store.export(attachment)
+                    }
+                    ShareLink(item: fileURL) { Image(systemName: "square.and.arrow.up") }
+                        .buttonStyle(.plain)
+                        .frame(width: 30, height: 30)
+                        .focusable(false)
+                        .focusEffectDisabled()
+                        .help(auraText("Share, including Messages", "공유하기 및 메시지"))
+                    previewButton("xmark", help: auraText("Close preview", "미리보기 닫기")) {
+                        store.previewAttachment = nil
+                    }
+                }
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(.bar)
 
             Group {
                 if isHTML {
                     HTMLFilePreview(url: fileURL)
+                } else if isImage {
+                    ImageFilePreview(url: fileURL)
                 } else {
                     QuickLookFilePreview(url: fileURL)
                 }
@@ -661,6 +672,15 @@ private struct ArtifactPreviewPane: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
+    private func previewButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: symbol) }
+            .buttonStyle(.plain)
+            .frame(width: 30, height: 30)
+            .focusable(false)
+            .focusEffectDisabled()
+            .help(help)
+    }
+
     private var previewSymbol: String {
         switch fileURL.pathExtension.lowercased() {
         case "xlsx", "csv": return "tablecells"
@@ -668,6 +688,31 @@ private struct ArtifactPreviewPane: View {
         case "docx", "rtf": return "doc.richtext"
         case "html", "htm": return "chevron.left.forwardslash.chevron.right"
         default: return "doc"
+        }
+    }
+}
+
+private struct ImageFilePreview: View {
+    let url: URL
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.opacity(0.12)
+                if let image = NSImage(contentsOf: url) {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(
+                            width: max(1, geometry.size.width - 32),
+                            height: max(1, geometry.size.height - 32)
+                        )
+                        .padding(16)
+                } else {
+                    ContentUnavailableView(auraText("Image unavailable", "이미지를 열 수 없습니다"), systemImage: "photo")
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
     }
 }
