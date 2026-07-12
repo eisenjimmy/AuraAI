@@ -7,6 +7,7 @@ import Foundation
 /// and bounds every iteration.
 struct AgentHarness {
     private let client = OpenAICompatibleClient()
+    private let sandboxWorker = SandboxWorker()
     private let maximumSteps = 8
 
     func run(
@@ -30,6 +31,7 @@ struct AgentHarness {
         var generatedAttachments: [ChatAttachment] = []
         var events: [AgentHarnessEvent] = []
         var loopGuard = AgentLoopGuard()
+        var performedToolWork = false
         var readableFolders = authorizedFolders.map(\.standardizedFileURL)
         let requestedFolder = AgentFolderIntent.explicitFolder(in: userPrompt)
         let artifactSource = history.map(\.modelContent).joined(separator: "\n\n") + "\n\n" + userPrompt
@@ -84,6 +86,7 @@ struct AgentHarness {
         )
         if let initialFolderResult {
             transcript.append(internalToolResult(initialFolderResult))
+            performedToolWork = true
         }
 
         for step in 1...maximumSteps {
@@ -139,6 +142,31 @@ struct AgentHarness {
                                 await onEvent(invalid)
                                 return AgentRunResult(response: failure, attachments: [], events: events)
                             }
+                            if let attachment = execution.attachments.last {
+                                let checking = AgentHarnessEvent(
+                                    kind: .toolRequested,
+                                    step: step,
+                                    title: auraText("Checking the finished file", "완성된 파일을 다시 확인하는 중"),
+                                    detail: auraText("An independent worker is checking the verified file evidence.", "독립 작업자가 검증된 파일 정보를 확인하고 있습니다.")
+                                )
+                                events.append(checking)
+                                await onEvent(checking)
+                                let verdict = await sandboxWorker.inspect(
+                                    .artifactValidation(task: userPrompt, artifact: attachment, expected: requestedArtifact),
+                                    configuration: configuration
+                                )
+                                if case .revise(let reason) = verdict {
+                                    let rejected = AgentHarnessEvent(
+                                        kind: .failed,
+                                        step: step,
+                                        title: auraText("File needs revision", "파일을 다시 다듬어야 합니다"),
+                                        detail: auraText("The independent check found a material mismatch.", "독립 검토에서 중요한 불일치가 발견되었습니다.")
+                                    )
+                                    events.append(rejected)
+                                    await onEvent(rejected)
+                                    return AgentRunResult(response: reason, attachments: [], events: events)
+                                }
+                            }
                             let observation = AgentHarnessEvent.observation(for: execution, step: step)
                             events.append(observation)
                             await onEvent(observation)
@@ -154,6 +182,45 @@ struct AgentHarness {
                         attachments: generatedAttachments,
                         events: events
                     )
+                }
+                if performedToolWork || requestedArtifact != nil {
+                    let checking = AgentHarnessEvent(
+                        kind: .toolRequested,
+                        step: step,
+                        title: auraText("Checking the completed work", "완료된 작업을 다시 확인하는 중"),
+                        detail: auraText("An independent worker is checking the final answer against verified results.", "독립 작업자가 검증된 결과와 최종 답변을 대조하고 있습니다.")
+                    )
+                    events.append(checking)
+                    await onEvent(checking)
+                    let verdict = await sandboxWorker.inspect(
+                        .responseValidation(task: userPrompt, response: reply, artifacts: generatedAttachments, toolWork: performedToolWork),
+                        configuration: configuration
+                    )
+                    switch verdict {
+                    case .approved:
+                        let verified = AgentHarnessEvent(
+                            kind: .observation,
+                            step: step,
+                            title: auraText("Independent check complete", "독립 검토가 완료되었습니다"),
+                            detail: auraText("The final answer matches the verified work.", "최종 답변이 검증된 작업 결과와 일치합니다.")
+                        )
+                        events.append(verified)
+                        await onEvent(verified)
+                    case .revise(let reason):
+                        let rejected = AgentHarnessEvent(
+                            kind: .failed,
+                            step: step,
+                            title: auraText("Final answer needs revision", "최종 답변을 다듬어야 합니다"),
+                            detail: auraText("The independent check found an unsupported or incomplete claim.", "독립 검토에서 근거가 부족하거나 빠진 내용이 발견되었습니다.")
+                        )
+                        events.append(rejected)
+                        await onEvent(rejected)
+                        await onTextDelta("")
+                        transcript.append(internalToolResult("Isolated response validation requested revision: \(reason). Rewrite the final answer using only verified results. Do not call another tool unless work is actually incomplete."))
+                        continue
+                    case .unavailable:
+                        break
+                    }
                 }
                 let completed = AgentHarnessEvent(
                     kind: .completed,
@@ -202,6 +269,33 @@ struct AgentHarness {
                 continue
             }
             let normalizedCall = requestedArtifact.map { $0.normalizing(call, title: artifactTitle ?? $0.defaultTitle) } ?? call
+            if normalizedCall.name == "write_file",
+               let path = normalizedCall.arguments["path"]?.stringValue,
+               let content = normalizedCall.arguments["content"]?.stringValue,
+               SandboxWorker.shouldReviewCode(path: path) {
+                let checking = AgentHarnessEvent(
+                    kind: .toolRequested,
+                    step: step,
+                    title: auraText("Reviewing the code draft", "코드 초안을 검토하는 중"),
+                    detail: auraText("An isolated worker is checking the proposed source change before it is written.", "분리된 작업자가 파일을 쓰기 전에 소스 변경안을 확인하고 있습니다.")
+                )
+                events.append(checking)
+                await onEvent(checking)
+                let verdict = await sandboxWorker.inspect(.codeReview(task: userPrompt, path: path, content: content), configuration: configuration)
+                if case .revise(let reason) = verdict {
+                    let rejected = AgentHarnessEvent(
+                        kind: .failed,
+                        step: step,
+                        title: auraText("Code draft needs revision", "코드 초안을 다듬어야 합니다"),
+                        detail: auraText("The file was not written until the issue is corrected.", "문제가 수정될 때까지 파일을 쓰지 않았습니다.")
+                    )
+                    events.append(rejected)
+                    await onEvent(rejected)
+                    transcript.append(internalToolRequest(normalizedCall))
+                    transcript.append(internalToolResult("Isolated code review rejected the draft before writing: \(reason). Produce a corrected file proposal."))
+                    continue
+                }
+            }
             let progress = normalizedCall.progressPresentation
             let requested = AgentHarnessEvent(
                 kind: .toolRequested,
@@ -222,6 +316,7 @@ struct AgentHarness {
             if let grantedFolder = execution.grantedFolder, !readableFolders.contains(grantedFolder) {
                 readableFolders.append(grantedFolder)
             }
+            performedToolWork = true
             if let requestedArtifact, !execution.attachments.isEmpty,
                let failure = ArtifactValidator.validate(execution.attachments, expected: requestedArtifact, source: artifactSource) {
                 let invalid = AgentHarnessEvent(
@@ -235,6 +330,33 @@ struct AgentHarness {
                 transcript.append(internalToolRequest(normalizedCall))
                 transcript.append(internalToolResult("Validation failed: \(failure) Repair the requested artifact or explain the blocker."))
                 continue
+            }
+            if let attachment = execution.attachments.last {
+                let checking = AgentHarnessEvent(
+                    kind: .toolRequested,
+                    step: step,
+                    title: auraText("Checking the finished file", "완성된 파일을 다시 확인하는 중"),
+                    detail: auraText("An independent worker is checking the verified file evidence.", "독립 작업자가 검증된 파일 정보를 확인하고 있습니다.")
+                )
+                events.append(checking)
+                await onEvent(checking)
+                let verdict = await sandboxWorker.inspect(
+                    .artifactValidation(task: userPrompt, artifact: attachment, expected: requestedArtifact),
+                    configuration: configuration
+                )
+                if case .revise(let reason) = verdict {
+                    let rejected = AgentHarnessEvent(
+                        kind: .failed,
+                        step: step,
+                        title: auraText("File needs revision", "파일을 다시 다듬어야 합니다"),
+                        detail: auraText("The independent check found a material mismatch.", "독립 검토에서 중요한 불일치가 발견되었습니다.")
+                    )
+                    events.append(rejected)
+                    await onEvent(rejected)
+                    transcript.append(internalToolRequest(normalizedCall))
+                    transcript.append(internalToolResult("Isolated artifact validation requested revision: \(reason). Repair the artifact before reporting it as ready."))
+                    continue
+                }
             }
             generatedAttachments += execution.attachments
             let observation = AgentHarnessEvent.observation(for: execution, step: step)
