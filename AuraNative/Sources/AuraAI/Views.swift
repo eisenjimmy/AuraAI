@@ -206,26 +206,21 @@ struct AuraWorkspaceView: View {
     @State private var isShowingAddMember = false
 
     var body: some View {
-        NavigationSplitView {
-            FriendsSidebar(isShowingAddMember: $isShowingAddMember)
-        } detail: {
+        Group {
             if let member = store.selectedMember {
-                if let attachment = store.previewAttachment {
-                    HSplitView {
-                        ChatView(member: member)
-                            .frame(minWidth: 360, idealWidth: 700)
-                        ArtifactPreviewPane(attachment: attachment)
-                            .frame(minWidth: 240, idealWidth: 460)
+                AdaptiveWorkspaceSplit(
+                    sidebar: FriendsSidebar(isShowingAddMember: $isShowingAddMember)
+                        .environmentObject(store),
+                    conversation: ChatView(member: member)
+                        .environmentObject(store),
+                    preview: store.previewAttachment.map {
+                        AnyView(ArtifactPreviewPane(attachment: $0).environmentObject(store))
                     }
-                } else {
-                    ChatView(member: member)
-                }
+                )
             } else {
                 ContentUnavailableView(auraText("Choose a teammate", "친구를 선택하세요"), systemImage: "person.2")
             }
         }
-        .navigationSplitViewStyle(.balanced)
-        .navigationSplitViewColumnWidth(min: 220, ideal: 300, max: 380)
         .sheet(isPresented: $isShowingAddMember) { AddMemberSheet() }
         .sheet(isPresented: $store.isShowingSettings) { SettingsView() }
         .sheet(isPresented: $store.isShowingGlobalMemory) {
@@ -242,6 +237,160 @@ struct AuraWorkspaceView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
+    }
+}
+
+/// A single native split hierarchy keeps the navigation rail from being
+/// compressed by an outer NavigationSplitView before the other panes resize.
+private struct AdaptiveWorkspaceSplit: NSViewRepresentable {
+    let sidebar: AnyView
+    let conversation: AnyView
+    let preview: AnyView?
+
+    init<Sidebar: View, Conversation: View>(
+        sidebar: Sidebar,
+        conversation: Conversation,
+        preview: AnyView?
+    ) {
+        self.sidebar = AnyView(sidebar)
+        self.conversation = AnyView(conversation)
+        self.preview = preview
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> AuraWorkspaceSplitView {
+        let splitView = AuraWorkspaceSplitView()
+        context.coordinator.install(in: splitView, sidebar: sidebar, conversation: conversation, preview: preview)
+        return splitView
+    }
+
+    func updateNSView(_ splitView: AuraWorkspaceSplitView, context: Context) {
+        context.coordinator.update(in: splitView, sidebar: sidebar, conversation: conversation, preview: preview)
+    }
+
+    final class Coordinator: NSObject, NSSplitViewDelegate {
+        private let sidebarMinimum: CGFloat = 280
+        private let contentMinimum: CGFloat = 300
+        private var sidebarHost: NSHostingController<AnyView>?
+        private var conversationHost: NSHostingController<AnyView>?
+        private var previewHost: NSHostingController<AnyView>?
+
+        func install(in splitView: AuraWorkspaceSplitView, sidebar: AnyView, conversation: AnyView, preview: AnyView?) {
+            splitView.delegate = self
+
+            let sidebarHost = NSHostingController(rootView: sidebar)
+            let conversationHost = NSHostingController(rootView: conversation)
+            self.sidebarHost = sidebarHost
+            self.conversationHost = conversationHost
+            splitView.addArrangedSubview(sidebarHost.view)
+            splitView.addArrangedSubview(conversationHost.view)
+
+            if let preview {
+                let previewHost = NSHostingController(rootView: preview)
+                self.previewHost = previewHost
+                splitView.addArrangedSubview(previewHost.view)
+            }
+
+            updateHoldingPriorities(in: splitView)
+            DispatchQueue.main.async { [weak self, weak splitView] in
+                guard let self, let splitView else { return }
+                self.setInitialPanePositions(in: splitView)
+            }
+        }
+
+        func update(in splitView: AuraWorkspaceSplitView, sidebar: AnyView, conversation: AnyView, preview: AnyView?) {
+            sidebarHost?.rootView = sidebar
+            conversationHost?.rootView = conversation
+
+            switch (previewHost, preview) {
+            case let (host?, preview?):
+                host.rootView = preview
+            case (nil, let preview?):
+                let host = NSHostingController(rootView: preview)
+                previewHost = host
+                splitView.addArrangedSubview(host.view)
+                updateHoldingPriorities(in: splitView)
+                DispatchQueue.main.async { [weak self, weak splitView] in
+                    guard let self, let splitView else { return }
+                    self.setInitialPanePositions(in: splitView)
+                }
+            case let (host?, nil):
+                splitView.removeArrangedSubview(host.view)
+                host.view.removeFromSuperview()
+                previewHost = nil
+                updateHoldingPriorities(in: splitView)
+            case (nil, nil):
+                break
+            }
+        }
+
+        private func updateHoldingPriorities(in splitView: AuraWorkspaceSplitView) {
+            guard splitView.arrangedSubviews.count >= 2 else { return }
+            // The sidebar should never be the pane that gives up room first.
+            splitView.setHoldingPriority(.dragThatCannotResizeWindow - 1, forSubviewAt: 0)
+            splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
+            if splitView.arrangedSubviews.count == 3 {
+                splitView.setHoldingPriority(.defaultLow, forSubviewAt: 2)
+            }
+        }
+
+        private func setInitialPanePositions(in splitView: AuraWorkspaceSplitView) {
+            let divider = splitView.dividerThickness
+            let count = splitView.arrangedSubviews.count
+            guard count >= 2 else { return }
+
+            let sidebarWidth = min(max(300, sidebarMinimum), splitView.bounds.width - contentMinimum - CGFloat(count - 1) * divider)
+            splitView.setPosition(sidebarWidth, ofDividerAt: 0)
+
+            guard count == 3 else { return }
+            let remaining = max(contentMinimum * 2, splitView.bounds.width - sidebarWidth - divider * 2)
+            splitView.setPosition(sidebarWidth + divider + remaining / 2, ofDividerAt: 1)
+        }
+
+        func splitView(_ splitView: NSSplitView, canCollapseSubview subview: NSView) -> Bool { false }
+
+        func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposed: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+            guard splitView.isVertical else { return proposed }
+            let divider = splitView.dividerThickness
+            if dividerIndex == 0 {
+                return max(proposed, sidebarMinimum)
+            }
+            let sidebarWidth = splitView.arrangedSubviews.first?.frame.width ?? sidebarMinimum
+            return max(proposed, sidebarWidth + divider + contentMinimum)
+        }
+
+        func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposed: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+            guard splitView.isVertical else { return proposed }
+            let divider = splitView.dividerThickness
+            if dividerIndex == 0 {
+                let trailingMinimum = contentMinimum * CGFloat(max(1, splitView.arrangedSubviews.count - 1))
+                return min(proposed, splitView.bounds.width - trailingMinimum - divider * CGFloat(max(1, splitView.arrangedSubviews.count - 1)))
+            }
+            return min(proposed, splitView.bounds.width - contentMinimum - divider)
+        }
+    }
+}
+
+private final class AuraWorkspaceSplitView: NSSplitView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        isVertical = true
+        dividerStyle = .thin
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override var dividerColor: NSColor {
+        NSColor(calibratedWhite: 0.28, alpha: 0.9)
+    }
+
+    override var dividerThickness: CGFloat { 1 }
+
+    override func drawDivider(in rect: NSRect) {
+        NSColor(calibratedWhite: 0.28, alpha: 0.9).setFill()
+        rect.fill()
     }
 }
 
