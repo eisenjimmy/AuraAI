@@ -15,6 +15,8 @@
 
 Aura AI turns an OpenAI-compatible model into a bounded desktop agent: it can reason over conversations and attachments, inspect an approved workspace, create real documents, and control macOS only through visible permission gates.
 
+![Aura AI](docs/assets/readme/hero.png)
+
 ![Aura AI native workspace](docs/assets/readme/aura-native-workspace.png)
 </div>
 
@@ -31,6 +33,14 @@ Most desktop chat clients stop at prompting. Aura AI adds the runtime around the
 - **Two complete editions**: Aura AI in English and Aura AI Korean with Korean UI, characters, prompts, responses, and generated memories.
 
 Aura AI is a native SwiftUI macOS application. The current release is built for Apple silicon and requires macOS 15 or newer.
+
+![Aura AI harness capabilities](docs/assets/readme/feature-grid.png)
+
+## Role-based collaborators
+
+Aura presents the harness through a team of editable AI friends. Each friend can have a distinct specialty, personality, portrait, private conversation, private memory vault, and narrower skill allowance. The social interface changes how the work feels; authority and execution still remain inside the same permissioned harness.
+
+![Aura AI collaborators](docs/assets/readme/personas.png)
 
 ## Harness at a glance
 
@@ -143,6 +153,8 @@ Aura exposes the current context usage in the chat header. Recent messages remai
 | Compatible cloud | Any compatible `/chat/completions` service |
 
 Aura does not bundle model weights. For local use, start a compatible server first and enter the exact model identifier exposed by `/v1/models`.
+
+![Aura AI local-first model connection](docs/assets/readme/local-first.png)
 
 ```bash
 curl http://127.0.0.1:8080/v1/models
