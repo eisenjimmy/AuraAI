@@ -9,7 +9,6 @@
 
 [![macOS 15+](https://img.shields.io/badge/macOS-15%2B-111111?logo=apple)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](https://www.swift.org/)
-[![Tests](https://github.com/eisenjimmy/AuraAI/actions/workflows/ci.yml/badge.svg)](https://github.com/eisenjimmy/AuraAI/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/eisenjimmy/AuraAI?display_name=tag)](https://github.com/eisenjimmy/AuraAI/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/eisenjimmy/AuraAI/total)](https://github.com/eisenjimmy/AuraAI/releases)
 [![License](https://img.shields.io/github/license/eisenjimmy/AuraAI)](LICENSE)
