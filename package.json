@@ -49,17 +49,6 @@
       "!**/._*",
       "!**/.DS_Store"
     ],
-    "extraResources": [
-      {
-        "from": "resources/kokoro-model",
-        "to": "kokoro-model",
-        "filter": [
-          "**/*",
-          "!**/._*",
-          "!**/.DS_Store"
-        ]
-      }
-    ],
     "mac": {
       "category": "public.app-category.productivity",
       "target": [

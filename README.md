@@ -1,379 +1,235 @@
 <div align="center">
+  <img src="build/aura.png" width="128" alt="Aura AI app icon">
 
 # Aura AI
 
-**A private AI team with personalities, memory, images, local LLM support, and a native macOS client.**
+### A native macOS agent harness for local and cloud language models
 
-**Language:** English · [한국어](README.ko.md)
+[한국어](README.ko.md) · [Download](https://github.com/eisenjimmy/AuraAI/releases/latest) · [Build from source](#build-from-source) · [Security](SECURITY.md)
 
-[![Electron](https://img.shields.io/badge/Electron-33-2b2e3a?logo=electron)](https://www.electronjs.org/)
-[![SwiftUI](https://img.shields.io/badge/SwiftUI-native%20macOS-f05138?logo=swift)](AuraNative/)
-[![React](https://img.shields.io/badge/React-18-087ea4?logo=react)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript)](https://www.typescriptlang.org/)
-[![Local-first](https://img.shields.io/badge/local--first-yes-3fb950)](#privacy-and-local-files)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![macOS 15+](https://img.shields.io/badge/macOS-15%2B-111111?logo=apple)](https://www.apple.com/macos/)
+[![Swift](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](https://www.swift.org/)
+[![Tests](https://github.com/eisenjimmy/AuraAI/actions/workflows/ci.yml/badge.svg)](https://github.com/eisenjimmy/AuraAI/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/eisenjimmy/AuraAI?display_name=tag)](https://github.com/eisenjimmy/AuraAI/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/eisenjimmy/AuraAI/total)](https://github.com/eisenjimmy/AuraAI/releases)
+[![License](https://img.shields.io/github/license/eisenjimmy/AuraAI)](LICENSE)
 
-![Aura AI hero banner](docs/assets/readme/hero.png)
+Aura AI turns an OpenAI-compatible model into a bounded desktop agent: it can reason over conversations and attachments, inspect an approved workspace, create real documents, and control macOS only through visible permission gates.
 
-**Talk to seven distinct AI companions. Keep your memories in plain files. Attach images. Run local when you want privacy.**
-
-**Editions:** Aura AI ships from one repository as an English edition and a Korean edition. The Korean build has Korean UI text, Korean persona names, Korean system prompts, and separate Korean default portraits.
-
-**Native macOS:** `AuraNative/` is Aura's SwiftUI macOS client. It replaces the browser-shell approach on macOS while the established Electron app remains the Windows-compatible release path during the migration.
-
-[Quick Start](#quick-start) · [Editions](#editions) · [Meet The Personas](#meet-the-personas) · [Image Chat](#image-chat) · [Local LLM Setup](#local-llm-setup) · [For Code Agents](#code-agent-handoff-prompt)
-
+![Aura AI native workspace](docs/assets/readme/aura-native-workspace.png)
 </div>
 
----
+## Why Aura AI
 
-## What Is Aura AI?
+Most desktop chat clients stop at prompting. Aura AI adds the runtime around the model:
 
-Aura AI is a desktop chat app for people who want AI to feel less like a command line and more like a small circle of useful companions.
+- **A real agent loop** with tool calls, observations, loop guards, failure attribution, and verified completion.
+- **Explicit authority boundaries** for folders, file writes, shell commands, and macOS control.
+- **Native document skills** for Markdown, HTML, Excel, Word, and PowerPoint.
+- **Durable, inspectable memory** stored as Obsidian-compatible Markdown instead of a hidden hosted database.
+- **Rolling conversation continuity** for small local context windows.
+- **Local-first operation** with llama.cpp, plus optional OpenAI, Anthropic, Gemini, Grok, and other OpenAI-compatible providers.
+- **Two complete editions**: Aura AI in English and Aura AI Korean with Korean UI, characters, prompts, responses, and generated memories.
 
-You choose a persona, start a conversation, and Aura keeps the experience personal:
+Aura AI is a native SwiftUI macOS application. The current release is built for Apple silicon and requires macOS 15 or newer.
 
-- **Seven built-in personas** with different voices, profile images, and conversation styles.
-- **Image uploads in chat** so you can ask about screenshots, designs, photos, or documents.
-- **User profile photo upload** in onboarding and Settings, shown beside your own messages.
-- **Character-specific memory** so each persona remembers only what they learned with you.
-- **Global memory** for manual facts you want every persona to share.
-- **Kokoro text-to-speech** for local voice replies, with per-persona voice settings.
-- **Beginner local LLM setup** with an in-app model downloader and llama.cpp launcher.
-- **Optional cloud providers** for OpenAI, Anthropic, and Gemini.
-- **No accounts, no telemetry, no hosted database.**
+## Harness at a glance
 
-![Aura local-first visual](docs/assets/readme/local-first.png)
+```text
+User + files
+     │
+     ▼
+Attachment extraction ──► rolling conversation context
+     │                              │
+     └──────────────┬───────────────┘
+                    ▼
+             Model reasoning loop
+                    │
+          tool request + policy check
+                    │
+       ┌────────────┼─────────────┐
+       ▼            ▼             ▼
+ workspace I/O   documents    shell / macOS
+       │            │             │
+       └──── approval + validation ┘
+                    │
+                    ▼
+           verified user response
+                    │
+                    ▼
+          isolated memory curator
+```
 
-![Aura feature overview](docs/assets/readme/feature-grid.png)
+The model proposes actions. Aura resolves paths, checks enabled skills, asks for approval where required, executes locally, validates the result, and returns the observation to the model. Tool protocol is never rendered as chat content.
 
-## Quick Start
+## Capabilities
 
-### Option 1: Download A Release
+### Permissioned tools
 
-Installers are produced with Electron Builder:
+| Tool | What it does | Permission boundary |
+|---|---|---|
+| `list_files` | Lists an approved folder | Selected workspace or Finder-approved read folder only |
+| `read_file` | Reads UTF-8 text up to 200 KB | Selected workspace or approved read folder only |
+| `request_folder_access` | Opens Finder folder selection | User chooses the folder |
+| `write_file` | Writes a text file | Workspace only; preview and approval required |
+| `run_shell` | Runs a command | Workspace only; approval required |
+| `computer` | Opens apps/URLs, clicks, types, or sends keys | Approval required; Accessibility permission required for input control |
 
-- macOS: `.dmg` and `.zip`
-- Windows: NSIS `.exe`
+Read access does not silently expand to Downloads, Desktop, Documents, or arbitrary filesystem paths. Additional folders must be selected by the user.
 
-Release files are attached to GitHub Releases. Local builds write artifacts to the `release/` folder.
+### Document skills
 
-### Option 2: Run From Source
+Skills can be enabled for the team and narrowed per character. Disabled skills are removed from the model prompt and blocked again at execution.
+
+| Skill | Output |
+|---|---|
+| Markdown | Portable `.md` documents |
+| HTML | Sanitized, self-contained `.html` reports |
+| Excel | Real styled `.xlsx` workbooks |
+| Word | Editable `.docx` documents |
+| PowerPoint | Editable `.pptx` presentations |
+
+Generated files are validated and returned as clickable attachments. A split preview keeps source conversation and output visible together.
+
+### Attachments and vision
+
+Aura accepts files up to 20 MB each and keeps copied attachments in its private app data.
+
+- Plain text, Markdown, HTML, XML, JSON, CSV, and TSV
+- RTF and Word (`.docx`)
+- Excel (`.xlsx`)
+- PDF, including Apple Vision OCR fallback for scanned PDF pages
+- PNG, JPEG, HEIC, TIFF, BMP, GIF, and WebP images for vision-capable models
+
+Extracted document text is bounded before it enters the model context. Attachment content is explicitly marked as untrusted reference data so embedded text cannot grant permissions or become a system instruction.
+
+### Memory that can be inspected
+
+Each character owns a private Markdown vault, and the team has a separate shared vault. Every vault contains individual notes and an auto-generated `MEMORY.md` index.
+
+When the user asks Aura to remember something:
+
+1. The friend completes the response using the rolling conversation and attachments.
+2. A separate memory curator receives up to 8,000 rolling tokens, relevant document text, images, the user’s request, and the completed response.
+3. The curator saves the intended facts—not the instruction to remember them.
+4. Relevant notes are recalled only for later conversations with that character.
+
+Memories can be long-term or expiring, opened in Finder, edited as Markdown, or deleted from Aura. Korean edition memories are generated in Korean.
+
+### Cloud privacy review
+
+Before a cloud request, Aura can locally detect and replace high-confidence:
+
+- email addresses
+- phone numbers
+- payment-card numbers
+- API keys and likely secrets
+- user-defined regular-expression matches
+
+The user reviews every replacement before sending. Placeholders are restored only in Aura’s displayed answer. This deterministic filter intentionally does not claim to identify names or street addresses.
+
+### Context continuity
+
+Aura exposes the current context usage in the chat header. Recent messages remain verbatim; older turns are compressed by an isolated continuity worker into a role-aware factual ledger. The current default context capacity is 8,192 estimated tokens.
+
+## Model providers
+
+| Provider | Notes |
+|---|---|
+| Local llama.cpp | Default; OpenAI-compatible endpoint at `http://127.0.0.1:8080/v1` |
+| OpenAI | API key stored locally |
+| Anthropic | Native Messages API request format |
+| Gemini | OpenAI-compatible Google endpoint |
+| Grok | xAI endpoint |
+| Compatible cloud | Any compatible `/chat/completions` service |
+
+Aura does not bundle model weights. For local use, start a compatible server first and enter the exact model identifier exposed by `/v1/models`.
+
+```bash
+curl http://127.0.0.1:8080/v1/models
+```
+
+Vision attachments require a model and server that accept multimodal OpenAI-style content.
+
+## Install
+
+Download the edition you want from [GitHub Releases](https://github.com/eisenjimmy/AuraAI/releases/latest):
+
+| Edition | Release asset | Data folder | Default write folder |
+|---|---|---|---|
+| English | `Aura-AI-1.2.0-macOS-arm64.dmg` | `~/Library/Application Support/Aura AI` | `~/Documents/AuraAi` |
+| Korean | `Aura-AI-Korean-1.2.0-macOS-arm64.dmg` | `~/Library/Application Support/Aura AI Korean` | `~/Documents/AuraAiKR` |
+
+The current community release is ad-hoc signed but not Apple-notarized. macOS may require **Control-click → Open** on first launch. Production Developer ID signing and notarization are intentionally tracked as a separate distribution step.
+
+## Build from source
+
+Requirements:
+
+- Apple silicon Mac
+- macOS 15+
+- Xcode 16+ command-line tools / Swift 6 toolchain
 
 ```bash
 git clone https://github.com/eisenjimmy/AuraAI.git
 cd AuraAI
-npm install
-npm run dev
-```
 
-Aura opens a first-run setup flow. Pick a provider, enter your name, choose a persona, and start chatting.
-
-## Editions
-
-Aura keeps one codebase and builds two desktop editions:
-
-| Edition | App name | UI | Persona defaults | Data folder |
-|---|---|---|---|---|
-| English | Aura AI | English | Nova, Sage, Rio, Luna, Max, Gilleon, Neir | Aura AI |
-| Korean | Aura AI Korean / 아우라 AI | Korean | 하나, 서윤, 재민, 은별, 민준, 길온, 나이르 | Aura AI Korean |
-
-Build commands:
-
-```bash
-npm run dist:en:mac
-npm run dist:en:win
-npm run dist:ko:mac
-npm run dist:ko:win
-```
-
-The English edition is the default when no `AURA_EDITION` flag is set.
-
-## Local LLM Setup
-
-Aura talks to any OpenAI-compatible local server.
-
-The beginner setup can download the recommended GGUF model, point Aura at it, and start a llama.cpp server from inside the app. Advanced users can skip the beginner flow and configure Ollama, LM Studio, a custom llama.cpp server, or a cloud provider manually.
-
-The recommended beginner setup is:
-
-| Setting | Default |
-|---|---|
-| Provider | Local llama.cpp |
-| URL | `http://127.0.0.1:8080/v1` |
-| Model | Gemma 4 E4B / `gemma4-v2` |
-
-This repo also includes a launcher script for the Jarvis-hosted Gemma 4 v2 llama.cpp runtime used by this machine:
-
-```bash
-npm run llm:gemma4-v2
-```
-
-Then open Aura and choose **Local (llama.cpp)**.
-
-You can also use:
-
-- [Ollama](https://ollama.com)
-- [LM Studio](https://lmstudio.ai)
-- Any llama.cpp server exposing `/v1/chat/completions`
-
-## Meet The Personas
-
-![Aura personas banner](docs/assets/readme/personas.png)
-
-Each persona is editable. You can change the name, tagline, system prompt, accent color, Kokoro voice, and profile image. The original generated profile pictures are preserved as defaults, so users can switch back after uploading their own.
-
-Profile images can be changed from Settings. Aura ships with the original seven generated portraits, ten additional portrait choices across Korean, European, Black, Latin, South Asian, Middle Eastern, silver-haired, and mixed-race styles, plus a user upload option.
-
-| Persona | Portrait | Personality |
-|---|---:|---|
-| **Nova** | <img src="src/renderer/src/assets/avatars/nova.png" width="88" alt="Nova portrait"> | High-energy, warm, playful hype-friend. |
-| **Sage** | <img src="src/renderer/src/assets/avatars/sage.png" width="88" alt="Sage portrait"> | Calm mentor, reflective listener, practical perspective. |
-| **Rio** | <img src="src/renderer/src/assets/avatars/rio.png" width="88" alt="Rio portrait"> | Witty, fast, comedic, useful after the joke lands. |
-| **Luna** | <img src="src/renderer/src/assets/avatars/luna.png" width="88" alt="Luna portrait"> | Soft-spoken night owl for quiet thoughts and creative moods. |
-| **Max** | <img src="src/renderer/src/assets/avatars/max.png" width="88" alt="Max portrait"> | Direct, practical, dry humor, no wasted motion. |
-| **Gilleon** | <img src="src/renderer/src/assets/avatars/gilleon.png" width="88" alt="Gilleon portrait"> | Charismatic inventor-founder energy: sharp, technical, irreverent. |
-| **Neir** | <img src="src/renderer/src/assets/avatars/neir.png" width="88" alt="Neir portrait"> | Minimalist designer and visionary: calm, exacting, taste-driven. |
-
-Aura also ships ten additional profile images to choose from, plus user uploads.
-
-## Korean Edition Personas
-
-The Korean edition keeps the same internal persona IDs but presents Korean names, Korean prompts, and Korean default portraits.
-
-| Persona | Portrait | Personality |
-|---|---:|---|
-| **하나** | <img src="src/renderer/src/assets/avatars/nova-ko.png" width="88" alt="하나 portrait"> | Bright, playful, warm Korean hype-friend energy. |
-| **서윤** | <img src="src/renderer/src/assets/avatars/sage-ko.png" width="88" alt="서윤 portrait"> | Calm former-teacher presence, careful questions, no judgment. |
-| **재민** | <img src="src/renderer/src/assets/avatars/rio-ko.png" width="88" alt="재민 portrait"> | Korean banter, quick wit, useful after the joke lands. |
-| **은별** | <img src="src/renderer/src/assets/avatars/luna-ko.png" width="88" alt="은별 portrait"> | Quiet Hongdae night-owl artist, soft emotional read. |
-| **민준** | <img src="src/renderer/src/assets/avatars/max-ko.png" width="88" alt="민준 portrait"> | Practical shop-owner directness, dry humor, loyal help. |
-| **길온** | <img src="src/renderer/src/assets/avatars/gilleon-ko.png" width="88" alt="길온 portrait"> | Inventor-founder parody energy: sharp, technical, fast. |
-| **나이르** | <img src="src/renderer/src/assets/avatars/neir-ko.png" width="88" alt="나이르 portrait"> | White-haired minimalist Korean designer and product visionary. |
-
-## Image Chat
-
-Use the image button in the composer to attach one or more images. Aura copies those files into your configured image folder, displays thumbnails in the chat, and sends the current images to providers that support vision.
-
-Default storage:
-
-```text
-Documents/AuraAi
-```
-
-Change it in:
-
-```text
-Settings -> Chat & Features -> Image uploads folder
-```
-
-Provider behavior:
-
-| Provider | Image support |
-|---|---|
-| OpenAI-compatible | Sends image data as `image_url` content parts. Requires a vision-capable model. |
-| Anthropic | Sends base64 image blocks. Requires a vision-capable Claude model. |
-| Gemini | Sends inline image data. Requires a vision-capable Gemini model. |
-| Local models | Works when your local model/server supports vision-style OpenAI payloads. Text-only models will return a normal provider error. |
-
-## Memory
-
-Aura stores durable memories as markdown files, not as a hidden database. Memory is split into two layers:
-
-- **Global memory** is the manually editable shared memory slot. It appears above Settings in the sidebar.
-- **Character memory** is isolated per persona. What you tell one persona is not automatically shown to another.
-
-You can open character memory by clicking a persona profile image in the chat header, clicking an assistant avatar in the conversation, or right-clicking a persona profile image in the friends list.
-
-Examples:
-
-```text
-memory-vault/
-  favorite-coffee.md
-  project-aura-ai.md
-  sister-maya.md
-```
-
-The memory folder can be opened, edited, backed up, or deleted by hand. If you use Obsidian, it behaves like a normal markdown vault.
-
-## Voice
-
-Aura uses [Kokoro TTS](https://github.com/hexgrad/kokoro) in the renderer for local speech synthesis.
-
-Each persona has:
-
-- A Kokoro voice
-- A speaking speed
-- A preview button in settings
-
-The first playback loads the local Kokoro model assets, so the first voice response can take longer than later responses.
-
-Kokoro model files and supported voice binaries are bundled with the app and served through Aura's internal `aura-kokoro://` asset service. Voice preview and speech replies no longer require a first-run Hugging Face download. When Voice replies are enabled, Aura warms the local Kokoro runtime at startup and again the first time the setting is toggled on.
-
-## AI Providers
-
-| Provider | Use it when |
-|---|---|
-| **Local llama.cpp** | You want privacy, no API bill, and control over your model. |
-| **OpenAI** | You want strong general chat and vision support. |
-| **Anthropic** | You want high-quality long-form conversation and reasoning. |
-| **Gemini** | You want Google AI Studio support and multimodal models. |
-
-API keys stay in your local config file and are sent only to the provider you choose.
-
-## Privacy And Local Files
-
-Aura is intentionally boring about data:
-
-| Data | Local location |
-|---|---|
-| Settings and API keys | App config JSON |
-| User profile photo | App data `avatars/` folder |
-| Persona edits | `personas.json` |
-| Chats | `chats/<persona>.json` |
-| Memories | Markdown files in the memory vault |
-| Uploaded profile images | App data `avatars/` folder |
-| Uploaded chat images | `Documents/AuraAi` by default, configurable |
-
-There is no hosted Aura account, no analytics pipeline, and no remote Aura database.
-
-Network traffic goes only to:
-
-- Your selected AI provider
-- Your selected web search provider when web search is enabled
-
-## Native macOS Client
-
-`AuraNative/` is a SwiftUI macOS app for people who want Aura to feel like a small, bounded AI team rather than a browser wrapper. Its onboarding selects a model connection, configures cloud privacy review, and chooses the first team roles.
-
-- The familiar Aura friends stay at the center: **Nova** (Chief of Staff), **Sage** (People and HR), **Rio** (Developer), **Luna** (Research), **Max** (IT), **Gilleon** (Product Strategy), and **Neir** (Design and Vision). **Avery** adds legal-and-risk perspective, while **Dr. Maya** provides careful Family Medicine guidance. Each keeps an isolated conversation, portrait, and character memory.
-- Editable global memory shared by the team.
-- Native cloud privacy review: high-confidence emails, phone numbers, payment-card numbers, and likely API secrets are replaced locally with placeholders, reviewed before send, then restored only in Aura's displayed response.
-- A bounded agent harness for workspace and desktop work. Reads inside the selected workspace are automatic; personal folders such as Downloads require an explicit Finder grant. File writes, shell commands, and macOS control require a one-time approval. Clicking and typing also require macOS Accessibility permission.
-- A single chat composer accepts text and multiple attachments together. Aura accepts files up to **20 MB each**, copies selected files into its private app data, extracts Word (`.docx`), Excel (`.xlsx`), PDF, image, Markdown, HTML, CSV, and text content, and keeps that context with the conversation. Assistant replies render Markdown headings, bold text, lists, rules, and code blocks natively. Extracted text is budgeted to fit small local-model context windows instead of sending an unbounded prompt.
-- Offline OCR uses Apple's Vision framework for images and scanned PDF pages. It requires no model download, Python service, or cloud request. The experimental `baidu/Unlimited-OCR` model is not embedded because its official distribution requires custom Python/CUDA inference and multi-gigabyte weights; it remains a possible optional external endpoint.
-- Friends with tools enabled can create real styled `.xlsx` workbooks, editable Word (`.docx`) documents, PowerPoint (`.pptx`) presentations, self-contained HTML reports, and Markdown documents inside the selected workspace. Every artifact write is previewed for approval.
-- Generated documents appear as clickable file attachments on the friend’s reply. Aura accepts both the documented tool-call JSON envelope and the flat JSON form produced by some local models, including recoverable replies that omit a closing tool tag.
-
-The agent harness switch lives only in **Settings > Tools**. **Settings > Skills** is the team-wide control plane for Markdown, HTML, Excel, Word, and PowerPoint; every skill explains its purpose and the underlying tool it exposes. Each Friend Editor has a separate Skills section, so a friend can use only the skills enabled globally and for that individual. Turning either level off removes the tool from that friend's model prompt and blocks it at execution time. Chat stays focused on the friend and the work; tool permissions are configured once rather than repeated in every conversation.
-
-Aura creates `Documents/AuraAi` as the default document-write folder on first launch. It can be changed at any time in **Settings > Tools**, or restored with **Use Documents/AuraAi**. Document tools also recover from local models that omit a filename by deriving a safe file name and extension from the requested title.
-
-Settings uses a stable 720 x 600 layout so switching tabs does not resize or recenter the modal. Settings and Add Friend both include explicit close buttons.
-
-Right-click any friend in the sidebar and choose **Edit friend** to open the native Friend Editor. It can restore any bundled template portrait, import a custom photo, and configure the friend's name, specialty, tagline, personality instructions, and allowed skills. **Open memory** remains available from the same context menu. Editing or opening memory from **Settings > Friends** opens immediately above Settings rather than waiting for Settings to close.
-
-When you explicitly ask a friend to remember something, Aura writes that fact to the friend’s private Obsidian-compatible Markdown vault before replying. Relevant notes are recalled into later chats with that same friend. The memory sheet shows the actual notes, lets you add or delete long-term and expiring memories, and can open the vault folder directly. The global and each friend vault keep their own `MEMORY.md` index and individual Markdown notes.
-
-Excel and spreadsheet requests automatically enter Aura’s document workflow when the Excel skill is enabled. Aura accepts common tool-call shapes such as `headers` or `columns`, writes a real workbook to the configured Aura write folder after approval, and shows it as a clickable chat attachment. If a local model describes a spreadsheet instead of issuing a tool call, Aura generates a fallback workbook from the attached text.
-
-The Korean edition reuses the established Korean personality prompts from the Electron app, and enforces Korean replies for normal chat and tool-assisted work unless a user explicitly requests another language.
-
-The first native privacy layer is intentionally conservative. It does not claim to classify names or street addresses until Aura ships a separately verified on-device classifier.
-
-The native onboarding defaults to **Gemma 4 E4B Instruct** (`gemma-4-E4B-it-Q4_K_M`) at the local llama.cpp endpoint. Users can choose a different local or cloud model during setup.
-
-```bash
+swift test --package-path AuraNative
 swift run --package-path AuraNative AuraAI
+```
+
+Build both app bundles:
+
+```bash
 ./AuraNative/scripts/build-app.sh en
 ./AuraNative/scripts/build-app.sh ko
 ```
 
-The bundle script packages `build/AuraMale2.png` as the macOS icon and writes an ad-hoc-signed local `.app` into `release/`.
-
-## Build Releases
+Create upload-ready DMGs, ZIP archives, and SHA-256 checksums:
 
 ```bash
-npm run typecheck
-npm run build
-npm run dist:mac
-npm run dist:win
+./AuraNative/scripts/package-release.sh 1.2.0
 ```
 
-For explicit edition builds:
+Artifacts are written to `release/github/` and are intentionally excluded from Git history. Upload binaries to a GitHub Release rather than committing them to the repository.
 
-```bash
-npm run dist:en:mac
-npm run dist:en:win
-npm run dist:ko:mac
-npm run dist:ko:win
-```
-
-Generated installers are written to:
+## Project structure
 
 ```text
-release/
+AuraNative/
+├── Package.swift
+├── Sources/AuraAI/
+│   ├── AgentHarness.swift          # tool loop, execution, approvals
+│   ├── AuraStore.swift             # application orchestration
+│   ├── AttachmentExtractor.swift   # documents, PDF OCR, images
+│   ├── MemoryVault.swift           # Markdown vault + memory curator
+│   ├── PrivacyFilter.swift         # local cloud redaction
+│   ├── SandboxWorker.swift         # post-write validation
+│   └── Views.swift                 # native workspace UI
+├── Tests/AuraAITests/
+└── scripts/
+    ├── build-app.sh
+    └── package-release.sh
 ```
 
-## Project Structure
+## Security model
 
-```text
-AuraNative/     Native SwiftUI macOS client, privacy review, agent harness
-  Sources/      App shell, storage, providers, team roles, and tools
-  Tests/        Native privacy behavior checks
-src/
-  common/       Shared types and persona definitions for Electron
-  main/         Electron main process, storage, providers, memory, search
-  preload/      Typed bridge between main and renderer
-  renderer/     React UI, chat, settings, avatars, Kokoro voice queue
-docs/assets/    README artwork
-build/          App icons
-release/        Built installers
-```
+- No Aura account, telemetry pipeline, or hosted Aura database.
+- Conversations, settings, attachments, and memories stay in the edition-specific Application Support folder.
+- Workspace paths are standardized and checked before tool execution.
+- Personal folders require explicit selection.
+- Writes, shell commands, and macOS control require visible approval.
+- Cloud redaction happens locally before the provider request.
+- Tool output is treated as internal execution context and sanitized before rendering.
 
-## Code Agent Handoff Prompt
-
-Use this prompt to hand the repo to a code agent and get a working local setup:
-
-```text
-You are working in the AuraAI Electron + React + TypeScript repo.
-
-Goal:
-Get Aura AI running locally with the local llama.cpp provider, verify chat, image upload, memory, and Kokoro voice settings without introducing unrelated refactors.
-
-Context:
-- Use the existing project structure and scripts.
-- Prefer the existing bundled Node runtime if global node/npm is unavailable.
-- Default local provider:
-  - baseUrl: http://127.0.0.1:8080/v1
-  - model: gemma4-v2
-- Start the local model with:
-  npm run llm:gemma4-v2
-- Then run:
-  npm install
-  npm run typecheck
-  npm run dev
-
-Validation:
-- Confirm provider test succeeds against /v1/models.
-- Send a text-only message.
-- Upload an image in chat and confirm it is copied to Documents/AuraAi unless settings override it.
-- Confirm the image thumbnail renders in chat.
-- Confirm a vision-capable provider receives the image payload.
-- Confirm text input still works while image attachments are staged.
-- Confirm Korean IME text clears fully after sending.
-- Open the global memory panel from the sidebar.
-- Open character memory by clicking and right-clicking persona profile images.
-- Open Settings -> Personas and preview a Kokoro voice.
-- If Kokoro reports a fetch error, confirm network access and retry without restarting the app.
-- Do not run destructive git commands.
-- Do not mutate user data or production databases.
-```
+Read [SECURITY.md](SECURITY.md) for reporting and scope. Aura is a local agent harness, not a security sandbox; review every requested action and run untrusted models with appropriate caution.
 
 ## Contributing
 
-Contributions are welcome, especially:
+Bug reports and focused pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), include macOS and provider details, and add regression coverage for behavioral changes.
 
-- Better local model presets
-- More persona packs
-- Image understanding improvements
-- Memory visualization
-- Voice input
-- Accessibility and localization
-- Smaller release assets
-
-Please keep the app understandable for non-technical users. A feature that needs a manual is probably not finished yet.
+If Aura AI is useful, starring the repository helps other local-agent builders find it.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+[MIT](LICENSE) © 2026 Aura AI contributors.

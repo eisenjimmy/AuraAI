@@ -190,7 +190,8 @@ enum ArtifactValidator {
 }
 
 enum AuraTheme {
-    static let accent = Color(red: 0.30, green: 0.63, blue: 0.55)
+    // Traditional blue keeps controls readable in the dark native surface.
+    static let accent = Color(red: 0.0, green: 0.478, blue: 1.0)
     static let selection = Color.white.opacity(0.085)
-    static let userBubble = Color(red: 0.17, green: 0.30, blue: 0.27)
+    static let userBubble = Color(red: 0.06, green: 0.23, blue: 0.46)
 }

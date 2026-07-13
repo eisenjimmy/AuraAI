@@ -35,8 +35,7 @@ struct OnboardingView: View {
     private var onboardingProgress: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 10) {
-                Image(systemName: "sparkles").font(.system(size: 18, weight: .medium))
-                Text("Aura").font(.headline)
+                Text("Aura AI").font(.headline)
             }
             Text(auraText("Friends with expertise, private to your Mac.", "전문성을 가진 친구들, 내 Mac 안에서 안전하게."))
                 .font(.callout)
@@ -64,7 +63,7 @@ struct OnboardingView: View {
             page
             Spacer(minLength: 0)
             HStack {
-                if step > 0 { Button(auraText("Back", "뒤로")) { step -= 1 }.buttonStyle(.bordered) }
+                if step > 0 { Button(auraText("Back", "뒤로")) { step -= 1 }.buttonStyle(ClickCursorBorderedButtonStyle()) }
                 Spacer()
                 Button(step == 3 ? auraText("Open Aura", "Aura 시작") : auraText("Continue", "계속")) {
                     if step == 3 {
@@ -75,7 +74,7 @@ struct OnboardingView: View {
                         step += 1
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(ClickCursorProminentButtonStyle())
                 .disabled(step == 3 && selectedFriendIDs.isEmpty)
             }
         }
@@ -157,7 +156,7 @@ struct OnboardingView: View {
                             .padding(10)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(ClickCursorBorderedButtonStyle())
                         .tint(selectedFriendIDs.contains(friend.id) ? .blue : .gray)
                     }
                 }
@@ -220,23 +219,11 @@ struct AuraWorkspaceView: View {
                         AnyView(ArtifactPreviewPane(attachment: $0).environmentObject(store))
                     }
                 )
-                .ignoresSafeArea(.container, edges: .top)
             } else {
                 ContentUnavailableView(auraText("Choose a teammate", "친구를 선택하세요"), systemImage: "person.2")
             }
         }
-        .overlay(alignment: .topLeading) {
-            Button { isSidebarVisible.toggle() } label: {
-                Image(systemName: "sidebar.left")
-                    .frame(width: 28, height: 28)
-            }
-            .buttonStyle(.plain)
-            .focusable(false)
-            .focusEffectDisabled()
-            .help(isSidebarVisible ? auraText("Hide sidebar", "사이드바 숨기기") : auraText("Show sidebar", "사이드바 보이기"))
-            .padding(.leading, 142)
-            .padding(.top, 9)
-        }
+        .background(WindowTitlebarSidebarToggle(isSidebarVisible: $isSidebarVisible))
         .overlay { WindowResizeCursorOverlay() }
         .sheet(isPresented: $isShowingAddMember) { AddMemberSheet() }
         .sheet(isPresented: $store.isShowingSettings) { SettingsView() }
@@ -244,7 +231,7 @@ struct AuraWorkspaceView: View {
             MemoryVaultSheet(title: auraText("Global memory", "공통 기억"), vault: store.globalMemoryVault())
         }
         .sheet(item: $store.memoryMember) { member in
-            MemoryVaultSheet(title: auraText("What \(member.name) remembers", "\(member.name)이 기억하는 내용"), vault: store.memberMemoryVault(member))
+            MemoryVaultSheet(title: auraText("What \(member.name) remembers", "\(koreanSubject(member.name)) 기억하는 내용"), vault: store.memberMemoryVault(member))
         }
         .sheet(item: $store.editingMember) { member in FriendEditor(member: member) }
         .sheet(item: $store.pendingPrivacy) { review in PrivacyReviewSheet(review: review) }
@@ -257,8 +244,255 @@ struct AuraWorkspaceView: View {
     }
 }
 
-/// A single native split hierarchy keeps the navigation rail from being
-/// compressed by an outer NavigationSplitView before the other panes resize.
+/// This is intentionally part of the workspace overlay instead of a titlebar
+/// accessory. Hidden-titlebar windows do not reliably render accessories, and
+/// the control must remain present after the navigation pane is hidden.
+private struct WorkspaceSidebarToggle: View {
+    @Binding var isSidebarVisible: Bool
+
+    var body: some View {
+        Button { isSidebarVisible.toggle() } label: {
+            Image(systemName: isSidebarVisible ? "sidebar.left" : "sidebar.right")
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(ClickCursorPlainButtonStyle())
+        .focusable(false)
+        .focusEffectDisabled()
+        .help(isSidebarVisible ? auraText("Hide sidebar", "사이드바 숨기기") : auraText("Show sidebar", "사이드바 보이기"))
+        .accessibilityLabel(isSidebarVisible ? auraText("Hide sidebar", "사이드바 숨기기") : auraText("Show sidebar", "사이드바 보이기"))
+    }
+}
+
+/// Places the navigation control in the real titlebar, immediately after the
+/// traffic lights. Unlike a SwiftUI toolbar item, it has no effect on pane
+/// layout and remains visible when the navigation pane is collapsed.
+private struct WindowTitlebarSidebarToggle: NSViewRepresentable {
+    @Binding var isSidebarVisible: Bool
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> TitlebarAnchorView {
+        let anchor = TitlebarAnchorView()
+        anchor.onWindowAvailable = { [weak coordinator = context.coordinator] window in
+            coordinator?.install(in: window)
+        }
+        return anchor
+    }
+
+    func updateNSView(_ anchor: TitlebarAnchorView, context: Context) {
+        context.coordinator.sidebarVisibility = $isSidebarVisible
+        if let window = anchor.window { context.coordinator.install(in: window) }
+        context.coordinator.render()
+    }
+
+    final class Coordinator: NSObject {
+        var sidebarVisibility: Binding<Bool>?
+        private weak var window: NSWindow?
+        private weak var titlebarView: NSView?
+        private weak var workspaceSplitView: WorkspaceSplitView?
+        private let button = PointingHandButton()
+        private let menuTitlebarMaterial = NSVisualEffectView()
+        private var constraints: [NSLayoutConstraint] = []
+        private var dividerExtensions: [NSView] = []
+        private var splitObserver: NSObjectProtocol?
+
+        deinit {
+            if let splitObserver { NotificationCenter.default.removeObserver(splitObserver) }
+        }
+
+        override init() {
+            super.init()
+            button.isBordered = false
+            button.imagePosition = .imageOnly
+            button.target = self
+            button.action = #selector(toggleSidebar)
+            button.toolTip = auraText("Hide sidebar", "사이드바 숨기기")
+            button.setAccessibilityLabel(button.toolTip)
+            menuTitlebarMaterial.material = .sidebar
+            menuTitlebarMaterial.blendingMode = .behindWindow
+            menuTitlebarMaterial.state = .active
+        }
+
+        func install(in window: NSWindow) {
+            guard let zoomButton = window.standardWindowButton(.zoomButton),
+                  let titlebarView = zoomButton.superview else { return }
+            self.window = window
+            self.titlebarView = titlebarView
+
+            if menuTitlebarMaterial.superview !== titlebarView {
+                menuTitlebarMaterial.removeFromSuperview()
+                titlebarView.addSubview(menuTitlebarMaterial, positioned: .below, relativeTo: nil)
+            }
+
+            if button.superview !== titlebarView {
+                NSLayoutConstraint.deactivate(constraints)
+                constraints = []
+                button.removeFromSuperview()
+                button.translatesAutoresizingMaskIntoConstraints = false
+                titlebarView.addSubview(button)
+                constraints = [
+                    button.leadingAnchor.constraint(equalTo: zoomButton.trailingAnchor, constant: 8),
+                    button.centerYAnchor.constraint(equalTo: zoomButton.centerYAnchor),
+                    button.widthAnchor.constraint(equalToConstant: 28),
+                    button.heightAnchor.constraint(equalToConstant: 24)
+                ]
+                NSLayoutConstraint.activate(constraints)
+            }
+            DispatchQueue.main.async { [weak self, weak window] in
+                guard let self, let window else { return }
+                self.observeDividerPositions(in: window)
+            }
+        }
+
+        func render() {
+            let isVisible = sidebarVisibility?.wrappedValue ?? true
+            button.image = NSImage(systemSymbolName: isVisible ? "sidebar.left" : "sidebar.right", accessibilityDescription: nil)
+            button.toolTip = isVisible ? auraText("Hide sidebar", "사이드바 숨기기") : auraText("Show sidebar", "사이드바 보이기")
+            button.setAccessibilityLabel(button.toolTip)
+        }
+
+        @objc private func toggleSidebar() {
+            sidebarVisibility?.wrappedValue.toggle()
+        }
+
+        private func observeDividerPositions(in window: NSWindow) {
+            guard let splitView = findWorkspaceSplit(in: window.contentView) else { return }
+            if workspaceSplitView !== splitView {
+                if let splitObserver { NotificationCenter.default.removeObserver(splitObserver) }
+                workspaceSplitView = splitView
+                splitObserver = NotificationCenter.default.addObserver(
+                    forName: NSSplitView.didResizeSubviewsNotification,
+                    object: splitView,
+                    queue: .main
+                ) { [weak self] _ in
+                    self?.syncDividerExtensions()
+                }
+            }
+            syncDividerExtensions()
+        }
+
+        private func syncDividerExtensions() {
+            guard let splitView = workspaceSplitView, let titlebarView else { return }
+            let panes = splitView.arrangedSubviews.dropLast()
+            let showsSidebar = sidebarVisibility?.wrappedValue == true
+            if showsSidebar, let sidebarPane = splitView.arrangedSubviews.first {
+                let point = splitView.convert(NSPoint(x: sidebarPane.frame.maxX, y: 0), to: titlebarView)
+                menuTitlebarMaterial.isHidden = false
+                menuTitlebarMaterial.frame = NSRect(x: 0, y: 0, width: floor(point.x), height: titlebarView.bounds.height)
+            } else {
+                menuTitlebarMaterial.isHidden = true
+            }
+            while dividerExtensions.count > panes.count {
+                dividerExtensions.removeLast().removeFromSuperview()
+            }
+            while dividerExtensions.count < panes.count {
+                let extensionView = NSView()
+                extensionView.wantsLayer = true
+                extensionView.layer?.backgroundColor = NSColor(calibratedWhite: 0.32, alpha: 1).cgColor
+                titlebarView.addSubview(extensionView, positioned: .above, relativeTo: menuTitlebarMaterial)
+                dividerExtensions.append(extensionView)
+            }
+            for (extensionView, pane) in zip(dividerExtensions, panes) {
+                let point = splitView.convert(NSPoint(x: pane.frame.maxX, y: 0), to: titlebarView)
+                extensionView.frame = NSRect(x: floor(point.x), y: 0, width: 1, height: titlebarView.bounds.height)
+            }
+        }
+
+        private func findWorkspaceSplit(in view: NSView?) -> WorkspaceSplitView? {
+            guard let view else { return nil }
+            if let splitView = view as? WorkspaceSplitView { return splitView }
+            return view.subviews.lazy.compactMap { self.findWorkspaceSplit(in: $0) }.first
+        }
+    }
+}
+
+private final class TitlebarAnchorView: NSView {
+    var onWindowAvailable: ((NSWindow) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if let window { onWindowAvailable?(window) }
+    }
+}
+
+private final class PointingHandButton: NSButton {
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+}
+
+struct ClickCursorDefaultButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.65 : 1)
+            .clickCursor()
+    }
+}
+
+private struct ClickCursorPlainButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .opacity(configuration.isPressed ? 0.65 : 1)
+            .clickCursor()
+    }
+}
+
+private struct ClickCursorBorderedButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(.white.opacity(0.16)))
+            .opacity(configuration.isPressed ? 0.65 : 1)
+            .clickCursor()
+    }
+}
+
+private struct ClickCursorProminentButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(AuraTheme.accent, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .opacity(configuration.isPressed ? 0.72 : 1)
+            .clickCursor()
+    }
+}
+
+private struct ClickCursorModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content.onHover { isHovering in
+            if isHovering { NSCursor.pointingHand.set() }
+            else { NSCursor.arrow.set() }
+        }
+    }
+}
+
+private extension View {
+    func clickCursor() -> some View { modifier(ClickCursorModifier()) }
+}
+
+private struct SidebarMaterialBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+}
+
+/// One plain split view owns the three pane surfaces. Structural changes always
+/// rebuild the arranged subviews so a collapsed navigation pane cannot retain
+/// stale width in the main layout.
 private struct AdaptiveWorkspaceSplit: NSViewRepresentable {
     @Binding var showsSidebar: Bool
     let sidebar: AnyView
@@ -279,43 +513,48 @@ private struct AdaptiveWorkspaceSplit: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeNSView(context: Context) -> AuraWorkspaceSplitView {
-        let splitView = AuraWorkspaceSplitView()
+    func makeNSView(context: Context) -> NSSplitView {
+        let splitView = WorkspaceSplitView()
+        splitView.isVertical = true
+        splitView.dividerStyle = .thin
         context.coordinator.install(
             in: splitView,
             sidebar: sidebar,
             conversation: conversation,
             preview: preview,
+            showsSidebar: showsSidebar,
             sidebarVisibility: $showsSidebar
         )
         return splitView
     }
 
-    func updateNSView(_ splitView: AuraWorkspaceSplitView, context: Context) {
+    func updateNSView(_ splitView: NSSplitView, context: Context) {
         context.coordinator.update(
             in: splitView,
             sidebar: sidebar,
             conversation: conversation,
             preview: preview,
+            showsSidebar: showsSidebar,
             sidebarVisibility: $showsSidebar
         )
     }
 
     final class Coordinator: NSObject, NSSplitViewDelegate {
         private let sidebarMinimum: CGFloat = 280
-        private let contentMinimum: CGFloat = 300
+        private let defaultSidebarWidth: CGFloat = 300
         private var sidebarHost: NSHostingController<AnyView>?
         private var conversationHost: NSHostingController<AnyView>?
         private var previewHost: NSHostingController<AnyView>?
+        private var currentShowsSidebar: Bool?
+        private var currentHasPreview: Bool?
         private var sidebarVisibility: Binding<Bool>?
-        private var lastContainerWidth: CGFloat = 0
-        private var wasAutomaticallyCollapsed = false
 
         func install(
-            in splitView: AuraWorkspaceSplitView,
+            in splitView: NSSplitView,
             sidebar: AnyView,
             conversation: AnyView,
             preview: AnyView?,
+            showsSidebar: Bool,
             sidebarVisibility: Binding<Bool>
         ) {
             splitView.delegate = self
@@ -325,28 +564,16 @@ private struct AdaptiveWorkspaceSplit: NSViewRepresentable {
             let conversationHost = NSHostingController(rootView: conversation)
             self.sidebarHost = sidebarHost
             self.conversationHost = conversationHost
-            splitView.addArrangedSubview(sidebarHost.view)
-            splitView.addArrangedSubview(conversationHost.view)
-
-            if let preview {
-                let previewHost = NSHostingController(rootView: preview)
-                self.previewHost = previewHost
-                splitView.addArrangedSubview(previewHost.view)
-            }
-
-            updateHoldingPriorities(in: splitView)
-            DispatchQueue.main.async { [weak self, weak splitView] in
-                guard let self, let splitView else { return }
-                self.setInitialPanePositions(in: splitView)
-                self.applySidebarVisibility(in: splitView)
-            }
+            if let preview { self.previewHost = NSHostingController(rootView: preview) }
+            rebuild(in: splitView, showsSidebar: showsSidebar, hasPreview: preview != nil)
         }
 
         func update(
-            in splitView: AuraWorkspaceSplitView,
+            in splitView: NSSplitView,
             sidebar: AnyView,
             conversation: AnyView,
             preview: AnyView?,
+            showsSidebar: Bool,
             sidebarVisibility: Binding<Bool>
         ) {
             self.sidebarVisibility = sidebarVisibility
@@ -354,143 +581,168 @@ private struct AdaptiveWorkspaceSplit: NSViewRepresentable {
             conversationHost?.rootView = conversation
 
             switch (previewHost, preview) {
-            case let (host?, preview?):
-                host.rootView = preview
-            case (nil, let preview?):
-                let host = NSHostingController(rootView: preview)
-                previewHost = host
-                splitView.addArrangedSubview(host.view)
-                updateHoldingPriorities(in: splitView)
-                DispatchQueue.main.async { [weak self, weak splitView] in
-                    guard let self, let splitView else { return }
-                    self.setInitialPanePositions(in: splitView)
-                }
-            case let (host?, nil):
-                splitView.removeArrangedSubview(host.view)
-                host.view.removeFromSuperview()
-                previewHost = nil
-                updateHoldingPriorities(in: splitView)
-            case (nil, nil):
-                break
+            case let (host?, preview?): host.rootView = preview
+            case (nil, let preview?): previewHost = NSHostingController(rootView: preview)
+            case (_, nil): previewHost = nil
             }
-            applySidebarVisibility(in: splitView)
-        }
 
-        private func updateHoldingPriorities(in splitView: AuraWorkspaceSplitView) {
-            guard splitView.arrangedSubviews.count >= 2 else { return }
-            // The sidebar should never be the pane that gives up room first.
-            splitView.setHoldingPriority(.dragThatCannotResizeWindow - 1, forSubviewAt: 0)
-            splitView.setHoldingPriority(.defaultLow, forSubviewAt: 1)
-            if splitView.arrangedSubviews.count == 3 {
-                splitView.setHoldingPriority(.defaultLow, forSubviewAt: 2)
+            let hasPreview = preview != nil
+            if currentShowsSidebar != showsSidebar || currentHasPreview != hasPreview {
+                rebuild(in: splitView, showsSidebar: showsSidebar, hasPreview: hasPreview)
             }
         }
 
-        private func setInitialPanePositions(in splitView: AuraWorkspaceSplitView) {
-            let divider = splitView.dividerThickness
-            let count = splitView.arrangedSubviews.count
-            guard count >= 2 else { return }
-
-            let sidebarWidth = min(max(300, sidebarMinimum), splitView.bounds.width - contentMinimum - CGFloat(count - 1) * divider)
-            splitView.setPosition(sidebarWidth, ofDividerAt: 0)
-
-            guard count == 3 else { return }
-            let remaining = max(contentMinimum * 2, splitView.bounds.width - sidebarWidth - divider * 2)
-            splitView.setPosition(sidebarWidth + divider + remaining / 2, ofDividerAt: 1)
-        }
-
-        private func applySidebarVisibility(in splitView: AuraWorkspaceSplitView) {
-            guard let sidebarView = sidebarHost?.view, let sidebarVisibility else { return }
-            let shouldHide = !sidebarVisibility.wrappedValue
-            guard sidebarView.isHidden != shouldHide else { return }
-            sidebarView.isHidden = shouldHide
+        private func rebuild(in splitView: NSSplitView, showsSidebar: Bool, hasPreview: Bool) {
+            splitView.arrangedSubviews.forEach {
+                splitView.removeArrangedSubview($0)
+                $0.removeFromSuperview()
+            }
+            if showsSidebar, let sidebarView = sidebarHost?.view {
+                splitView.addArrangedSubview(sidebarView)
+            }
+            if let conversationView = conversationHost?.view {
+                splitView.addArrangedSubview(conversationView)
+            }
+            if hasPreview, let previewView = previewHost?.view {
+                splitView.addArrangedSubview(previewView)
+            }
+            currentShowsSidebar = showsSidebar
+            currentHasPreview = hasPreview
+            (splitView as? WorkspaceSplitView)?.fixedDividerIndices = showsSidebar ? [0] : []
             splitView.adjustSubviews()
-            if !shouldHide {
-                splitView.setPosition(300, ofDividerAt: 0)
+            DispatchQueue.main.async { [weak splitView] in
+                guard let splitView else { return }
+                if showsSidebar, splitView.arrangedSubviews.count >= 2 {
+                    splitView.setPosition(self.defaultSidebarWidth, ofDividerAt: 0)
+                }
+                if hasPreview, splitView.arrangedSubviews.count >= 2 {
+                    let divider = splitView.dividerThickness
+                    let contentStart = showsSidebar ? self.defaultSidebarWidth + divider : 0
+                    let remaining = max(680, splitView.bounds.width - contentStart - divider)
+                    splitView.setPosition(contentStart + remaining * 0.62, ofDividerAt: splitView.arrangedSubviews.count - 2)
+                }
             }
         }
-
-        func splitView(_ splitView: NSSplitView, canCollapseSubview subview: NSView) -> Bool { false }
 
         func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposed: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-            guard splitView.isVertical else { return proposed }
-            let divider = splitView.dividerThickness
-            if dividerIndex == 0 {
-                return max(proposed, sidebarMinimum)
-            }
-            let sidebarWidth = splitView.arrangedSubviews.first?.frame.width ?? sidebarMinimum
-            return max(proposed, sidebarWidth + divider + contentMinimum)
+            guard dividerIndex == 0, currentShowsSidebar == true else { return proposed }
+            return defaultSidebarWidth
+        }
+
+        func splitView(_ splitView: NSSplitView, constrainSplitPosition proposed: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
+            guard dividerIndex == 0, currentShowsSidebar == true else { return proposed }
+            return defaultSidebarWidth
         }
 
         func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposed: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-            guard splitView.isVertical else { return proposed }
-            let divider = splitView.dividerThickness
-            if dividerIndex == 0 {
-                let trailingMinimum = contentMinimum * CGFloat(max(1, splitView.arrangedSubviews.count - 1))
-                return min(proposed, splitView.bounds.width - trailingMinimum - divider * CGFloat(max(1, splitView.arrangedSubviews.count - 1)))
-            }
-            return min(proposed, splitView.bounds.width - contentMinimum - divider)
+            guard dividerIndex == 0, currentShowsSidebar == true else { return proposed }
+            return defaultSidebarWidth
         }
 
-        func splitViewDidResizeSubviews(_ notification: Notification) {
-            guard let splitView = notification.object as? NSSplitView,
-                  let sidebarVisibility else { return }
-            let width = splitView.bounds.width
-            guard abs(width - lastContainerWidth) > 1 else { return }
-            lastContainerWidth = width
-
-            let hasPreview = previewHost != nil
-            let collapseThreshold: CGFloat = hasPreview ? 1_300 : 980
-            let restoreThreshold: CGFloat = hasPreview ? 1_400 : 1_080
-
-            if width < collapseThreshold, sidebarVisibility.wrappedValue {
-                wasAutomaticallyCollapsed = true
-                DispatchQueue.main.async { sidebarVisibility.wrappedValue = false }
-            } else if width > restoreThreshold, wasAutomaticallyCollapsed, !sidebarVisibility.wrappedValue {
-                wasAutomaticallyCollapsed = false
-                DispatchQueue.main.async { sidebarVisibility.wrappedValue = true }
-            }
+        func splitView(_ splitView: NSSplitView, shouldAdjustSizeOfSubview subview: NSView) -> Bool {
+            subview !== sidebarHost?.view
         }
     }
 }
 
-private final class AuraWorkspaceSplitView: NSSplitView {
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        isVertical = true
-        dividerStyle = .thin
-        wantsLayer = true
+private final class WorkspaceSplitView: NSSplitView {
+    private var dividerTrackingAreas: [NSTrackingArea] = []
+    var fixedDividerIndices: Set<Int> = [] {
+        didSet {
+            if oldValue != fixedDividerIndices {
+                hoveredDividerIndex = nil
+                needsDisplay = true
+                window?.invalidateCursorRects(for: self)
+            }
+        }
+    }
+    private var hoveredDividerIndex: Int? {
+        didSet { if oldValue != hoveredDividerIndex { needsDisplay = true } }
     }
 
-    required init?(coder: NSCoder) { nil }
-
     override var dividerColor: NSColor {
-        NSColor(calibratedWhite: 0.28, alpha: 0.9)
+        NSColor(calibratedWhite: 0.32, alpha: 1)
     }
 
     override var dividerThickness: CGFloat { 1 }
 
     override func drawDivider(in rect: NSRect) {
-        NSColor(calibratedWhite: 0.28, alpha: 0.9).setFill()
+        if let hoveredDividerIndex,
+           dividerRect(for: hoveredDividerIndex).intersects(rect) {
+            NSColor.controlAccentColor.withAlphaComponent(0.22).setFill()
+            rect.insetBy(dx: -2, dy: 0).fill()
+            NSColor.controlAccentColor.withAlphaComponent(0.72).setFill()
+            rect.fill()
+            return
+        }
+        dividerColor.setFill()
         rect.fill()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if dividerHitAreas.contains(where: { $0.rect.contains(point) }) { return self }
+        return super.hitTest(point)
     }
 
     override func resetCursorRects() {
         super.resetCursorRects()
-        for pane in arrangedSubviews.dropLast() {
-            let hitArea = NSRect(
-                x: pane.frame.maxX - 4,
-                y: bounds.minY,
-                width: dividerThickness + 8,
-                height: bounds.height
-            )
-            addCursorRect(hitArea, cursor: .columnResize(directions: .all))
+        dividerHitAreas.forEach { addCursorRect($0.rect, cursor: .columnResize(directions: .all)) }
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if let area = dividerHitAreas.first(where: { $0.rect.contains(point) }) {
+            hoveredDividerIndex = area.index
+            NSCursor.columnResize(directions: .all).set()
+        } else {
+            hoveredDividerIndex = nil
+            super.cursorUpdate(with: event)
         }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        dividerTrackingAreas.forEach(removeTrackingArea)
+        dividerTrackingAreas = dividerHitAreas.map { hitArea in
+            let trackingArea = NSTrackingArea(
+                rect: hitArea.rect,
+                options: [.activeAlways, .mouseEnteredAndExited, .cursorUpdate],
+                owner: self,
+                userInfo: ["dividerIndex": hitArea.index]
+            )
+            addTrackingArea(trackingArea)
+            return trackingArea
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        if let index = event.trackingArea?.userInfo?["dividerIndex"] as? Int {
+            hoveredDividerIndex = index
+            NSCursor.columnResize(directions: .all).set()
+        }
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hoveredDividerIndex = nil
     }
 
     override func layout() {
         super.layout()
+        updateTrackingAreas()
         window?.invalidateCursorRects(for: self)
+    }
+
+    private var dividerHitAreas: [(index: Int, rect: NSRect)] {
+        arrangedSubviews.dropLast().enumerated().compactMap { index, pane in
+            guard !fixedDividerIndices.contains(index) else { return nil }
+            return (index, NSRect(x: pane.frame.maxX - 4, y: bounds.minY, width: dividerThickness + 8, height: bounds.height))
+        }
+    }
+
+    private func dividerRect(for index: Int) -> NSRect {
+        guard arrangedSubviews.indices.contains(index) else { return .zero }
+        let pane = arrangedSubviews[index]
+        return NSRect(x: pane.frame.maxX, y: bounds.minY, width: dividerThickness, height: bounds.height)
     }
 }
 
@@ -531,20 +783,17 @@ private struct FriendsSidebar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 9) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(AuraTheme.accent)
-                Text("Aura")
+                Text("Aura AI")
                     .font(.headline)
                 Spacer()
                 Button { isShowingAddMember = true } label: { Image(systemName: "person.badge.plus") }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ClickCursorPlainButtonStyle())
                     .focusable(false)
                     .focusEffectDisabled()
                     .help(auraText("Add friend", "친구 추가"))
             }
             .padding(.horizontal, 16)
-            .padding(.top, 50)
+            .padding(.top, 16)
             .padding(.bottom, 11)
 
             Text(auraText("Friends", "친구"))
@@ -578,7 +827,7 @@ private struct FriendsSidebar: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 9)
         }
-        .background(.ultraThinMaterial)
+        .background(SidebarMaterialBackground())
     }
 }
 
@@ -595,7 +844,7 @@ private struct SidebarAction: View {
                 .padding(.horizontal, 9)
                 .padding(.vertical, 7)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(ClickCursorPlainButtonStyle())
         .focusable(false)
         .focusEffectDisabled()
     }
@@ -693,7 +942,7 @@ private struct ChatView: View {
                 Spacer()
                 Button { store.memoryMember = member } label: { Image(systemName: "brain.head.profile") }
                     .help(auraText("Character memory", "캐릭터별 기억"))
-                    .buttonStyle(.plain)
+                    .buttonStyle(ClickCursorPlainButtonStyle())
                     .focusable(false)
                     .focusEffectDisabled()
             }
@@ -775,7 +1024,9 @@ private struct ChatView: View {
                         Image(systemName: "paperclip")
                             .frame(width: 28, height: 28)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ClickCursorPlainButtonStyle())
+                    .focusable(false)
+                    .focusEffectDisabled()
                     .disabled(store.isWorking(for: member) || store.isExtractingAttachments)
                     .help(auraText("Attach image, PDF, Word, Excel, or text", "이미지, PDF, Word, Excel 또는 텍스트 첨부"))
 
@@ -791,7 +1042,9 @@ private struct ChatView: View {
                         Button { store.beginSend() } label: {
                             Image(systemName: "arrow.up.circle.fill").font(.title2)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ClickCursorPlainButtonStyle())
+                        .focusable(false)
+                        .focusEffectDisabled()
                         .disabled((store.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && store.pendingAttachments.isEmpty) || store.isWorking(for: member))
                         .help(auraText("Send", "보내기"))
                     }
@@ -892,7 +1145,7 @@ private struct AttachmentChip: View {
             ImageAttachmentPreview(attachment: attachment, url: url, remove: remove)
         } else if remove == nil, existingFileURL != nil {
             Button { store.previewAttachment = attachment } label: { chipContent }
-                .buttonStyle(.plain)
+                .buttonStyle(ClickCursorPlainButtonStyle())
                 .help(auraText("Preview file", "파일 미리보기"))
         } else {
             chipContent
@@ -913,7 +1166,7 @@ private struct AttachmentChip: View {
             }
             if let remove {
                 Button(action: remove) { Image(systemName: "xmark.circle.fill") }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ClickCursorPlainButtonStyle())
                     .foregroundStyle(.secondary)
                     .help(auraText("Remove attachment", "첨부 삭제"))
             }
@@ -945,7 +1198,7 @@ private struct ImageAttachmentPreview: View {
 
             if let remove {
                 Button(action: remove) { Image(systemName: "xmark.circle.fill") }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ClickCursorPlainButtonStyle())
                     .foregroundStyle(.white, .black.opacity(0.55))
                     .padding(7)
                     .help(auraText("Remove attachment", "첨부 삭제"))
@@ -998,7 +1251,7 @@ private struct ArtifactPreviewPane: View {
                         store.export(attachment)
                     }
                     ShareLink(item: fileURL) { Image(systemName: "square.and.arrow.up") }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ClickCursorPlainButtonStyle())
                         .frame(width: 30, height: 30)
                         .focusable(false)
                         .focusEffectDisabled()
@@ -1035,7 +1288,7 @@ private struct ArtifactPreviewPane: View {
 
     private func previewButton(_ symbol: String, help: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { Image(systemName: symbol) }
-            .buttonStyle(.plain)
+            .buttonStyle(ClickCursorPlainButtonStyle())
             .frame(width: 30, height: 30)
             .focusable(false)
             .focusEffectDisabled()
@@ -1090,7 +1343,7 @@ private struct PresentationFilePreview: View {
                         Button { slideIndex = max(0, slideIndex - 1) } label: {
                             Image(systemName: "chevron.left")
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ClickCursorPlainButtonStyle())
                         .disabled(slideIndex == 0)
                         .help(auraText("Previous slide", "이전 슬라이드"))
 
@@ -1103,7 +1356,7 @@ private struct PresentationFilePreview: View {
                         Button { slideIndex = min(max(0, slideCount - 1), slideIndex + 1) } label: {
                             Image(systemName: "chevron.right")
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ClickCursorPlainButtonStyle())
                         .disabled(slideIndex >= max(0, slideCount - 1))
                         .help(auraText("Next slide", "다음 슬라이드"))
 
@@ -1482,7 +1735,9 @@ private struct AddMemberSheet: View {
                     Image(systemName: "xmark")
                         .frame(width: 24, height: 24)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ClickCursorPlainButtonStyle())
+                .focusable(false)
+                .focusEffectDisabled()
                 .help(auraText("Close", "닫기"))
             }
             Text(auraText("Start from a role, then adjust its identity and instructions in Settings.", "역할을 선택한 뒤 설정에서 이름과 지침을 조정하세요."))
@@ -1495,7 +1750,7 @@ private struct AddMemberSheet: View {
                     Label(role.title, systemImage: role.symbol)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(ClickCursorBorderedButtonStyle())
             }
         }
         .padding(24)
@@ -1520,7 +1775,9 @@ struct SettingsView: View {
                     Image(systemName: "xmark")
                         .frame(width: 24, height: 24)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ClickCursorPlainButtonStyle())
+                .focusable(false)
+                .focusEffectDisabled()
                 .help(auraText("Close settings", "설정 닫기"))
             }
             .padding(.horizontal, 18)
@@ -1540,7 +1797,7 @@ struct SettingsView: View {
             FriendEditor(member: member)
         }
         .sheet(item: $memoryMember) { member in
-            MemoryVaultSheet(title: auraText("What \(member.name) remembers", "\(member.name)이 기억하는 내용"), vault: store.memberMemoryVault(member))
+            MemoryVaultSheet(title: auraText("What \(member.name) remembers", "\(koreanSubject(member.name)) 기억하는 내용"), vault: store.memberMemoryVault(member))
         }
         .onDisappear { store.saveSettings() }
     }
@@ -1575,7 +1832,7 @@ struct SettingsView: View {
             ForEach(store.members) { member in
                 HStack {
                     Button { editingMember = member } label: { TeamAvatar(member: member, size: 30) }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ClickCursorPlainButtonStyle())
                         .help(auraText("Edit friend", "친구 편집"))
                     VStack(alignment: .leading) {
                         Text(member.name)
@@ -1583,9 +1840,9 @@ struct SettingsView: View {
                     }
                     Spacer()
                     Button(auraText("Edit", "편집")) { editingMember = member }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(ClickCursorBorderedButtonStyle())
                     Button(auraText("Memory", "기억")) { memoryMember = member }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(ClickCursorBorderedButtonStyle())
                 }
             }
         }
@@ -1679,7 +1936,7 @@ private struct FriendEditor: View {
                     .font(.title2.weight(.semibold))
                 Spacer()
                 Button { dismiss() } label: { Image(systemName: "xmark").frame(width: 24, height: 24) }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ClickCursorPlainButtonStyle())
                     .help(auraText("Close", "닫기"))
             }
             .padding(20)
@@ -1697,7 +1954,7 @@ private struct FriendEditor: View {
                             } label: {
                                 Label(auraText("Upload your own photo", "내 사진 업로드"), systemImage: "square.and.arrow.up")
                             }
-                            .buttonStyle(.bordered)
+                            .buttonStyle(ClickCursorBorderedButtonStyle())
                         }
                     }
 
@@ -1719,7 +1976,7 @@ private struct FriendEditor: View {
                                             }
                                         }
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(ClickCursorPlainButtonStyle())
                                 .help(asset)
                             }
                         }
@@ -1782,7 +2039,7 @@ private struct FriendEditor: View {
                     store.saveMember(draft)
                     dismiss()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(ClickCursorProminentButtonStyle())
                 .disabled(draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
             .padding(16)
@@ -1849,7 +2106,7 @@ private struct MemoryVaultSheet: View {
                             } label: {
                                 Image(systemName: "trash")
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(ClickCursorPlainButtonStyle())
                             .help(auraText("Delete memory", "기억 삭제"))
                         }
                         .padding(.vertical, 3)
@@ -1877,7 +2134,7 @@ private struct MemoryVaultSheet: View {
                         draft = ""
                         reload()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(ClickCursorProminentButtonStyle())
                 }
             }
             HStack {
@@ -1924,7 +2181,7 @@ private struct PrivacyReviewSheet: View {
             HStack {
                 Button(auraText("Cancel", "취소"), role: .cancel) { store.cancelPrivacy() }
                 Spacer()
-                Button(auraText("Send redacted", "가림 처리본 보내기")) { store.approvePrivacy() }.buttonStyle(.borderedProminent)
+                Button(auraText("Send redacted", "가림 처리본 보내기")) { store.approvePrivacy() }.buttonStyle(ClickCursorProminentButtonStyle())
             }
         }
         .padding(22)
@@ -1952,7 +2209,7 @@ private struct AgentApprovalSheet: View {
             HStack {
                 Button(auraText("Decline", "거절"), role: .cancel) { store.resolveApproval(false) }
                 Spacer()
-                Button(auraText("Allow once", "한 번 허용")) { store.resolveApproval(true) }.buttonStyle(.borderedProminent)
+                Button(auraText("Allow once", "한 번 허용")) { store.resolveApproval(true) }.buttonStyle(ClickCursorProminentButtonStyle())
             }
         }
         .padding(22)

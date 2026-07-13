@@ -375,12 +375,6 @@ final class AuraStore: ObservableObject {
 
         Task {
             do {
-                let memoryUpdate = await updatePrivateMemoryIfRequested(
-                    message: displayText,
-                    conversation: conversationSnapshot,
-                    member: member,
-                    configuration: config
-                )
                 let globalMemory = globalMemoryContext(query: text)
                 let privateMemory = memberMemoryContext(for: member, query: text)
                 let continuity = await conversationContinuity(
@@ -402,7 +396,7 @@ final class AuraStore: ObservableObject {
                     skills: skills,
                     requestedArtifact: requestedArtifact,
                     attachments: attachments,
-                    memoryUpdate: memoryUpdate,
+                    memoryUpdate: nil,
                     conversationContinuity: continuity,
                     requestFolder: { name in await self.requestFolderAccess(named: name) },
                     approval: { approval in await self.requestApproval(approval) },
@@ -418,7 +412,32 @@ final class AuraStore: ObservableObject {
                 )
                 response = result.response
                 responseAttachments = result.attachments
-                let restored = privacyReview.map { privacyFilter.restore(response, review: $0) } ?? response
+                var restored = privacyReview.map { privacyFilter.restore(response, review: $0) } ?? response
+                if let memoryRequest = MemorySubagent.resolvedCaptureRequest(
+                    currentRequest: displayText,
+                    conversation: conversationSnapshot,
+                    completedResponse: restored
+                ) {
+                    let completedConversation = conversationSnapshot + [ConversationMessage(
+                        role: .assistant,
+                        content: restored,
+                        attachments: responseAttachments
+                    )]
+                    let recoveredMemory = await updatePrivateMemoryIfRequested(
+                        message: memoryRequest,
+                        conversation: completedConversation,
+                        member: member,
+                        configuration: config,
+                        isPostResponseRetry: true
+                    )
+                    if let saved = recoveredMemory?.saved, !saved.isEmpty {
+                        let confirmation = auraText(
+                            "Memory saved: " + saved.map(\.text).joined(separator: " "),
+                            "기억에 저장했습니다: " + saved.map(\.text).joined(separator: " ")
+                        )
+                        restored += "\n\n\(confirmation)"
+                    }
+                }
                 if streamingMemberID == member.id {
                     streamingResponse = ""
                     streamingMemberID = nil
@@ -464,7 +483,8 @@ final class AuraStore: ObservableObject {
         message: String,
         conversation: [ConversationMessage],
         member: TeamMember,
-        configuration: ProviderConfiguration
+        configuration: ProviderConfiguration,
+        isPostResponseRetry: Bool = false
     ) async -> MemoryUpdate? {
         guard MemorySubagent.isCaptureRequest(message) else { return nil }
         harnessEvents.append(AgentHarnessEvent(
@@ -480,13 +500,15 @@ final class AuraStore: ObservableObject {
                 configuration: configuration
             )
             guard !candidates.isEmpty else {
-                harnessEvents.append(AgentHarnessEvent(
-                    kind: .observation,
-                    step: 0,
-                    title: auraText("No durable detail to save", "저장할 구체적인 정보가 없습니다"),
-                    detail: auraText("I did not save the instruction itself.", "기억해 달라는 요청 문장 자체는 저장하지 않았습니다.")
-                ))
-                return MemoryUpdate(saved: [])
+                if isPostResponseRetry {
+                    harnessEvents.append(AgentHarnessEvent(
+                        kind: .observation,
+                        step: 0,
+                        title: auraText("No durable detail to save", "저장할 구체적인 정보가 없습니다"),
+                        detail: auraText("I did not save the instruction itself.", "기억해 달라는 요청 문장 자체는 저장하지 않았습니다.")
+                    ))
+                }
+                return nil
             }
             let vault = persistence.memberMemoryVault(member.id)
             for candidate in candidates {
@@ -500,13 +522,15 @@ final class AuraStore: ObservableObject {
             ))
             return MemoryUpdate(saved: candidates)
         } catch {
-            harnessEvents.append(AgentHarnessEvent(
-                kind: .failed,
-                step: 0,
-                title: auraText("Memory was not updated", "기억을 업데이트하지 못했습니다"),
-                detail: auraText("The chat can continue, but no unverified memory was saved.", "대화는 계속할 수 있지만 검증되지 않은 기억은 저장하지 않았습니다.")
-            ))
-            return MemoryUpdate(saved: [])
+            if isPostResponseRetry {
+                harnessEvents.append(AgentHarnessEvent(
+                    kind: .failed,
+                    step: 0,
+                    title: auraText("Memory was not updated", "기억을 업데이트하지 못했습니다"),
+                    detail: auraText("The chat can continue, but no unverified memory was saved.", "대화는 계속할 수 있지만 검증되지 않은 기억은 저장하지 않았습니다.")
+                ))
+            }
+            return nil
         }
     }
 

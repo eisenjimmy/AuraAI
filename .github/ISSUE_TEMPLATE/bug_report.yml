@@ -1,0 +1,47 @@
+name: Bug report
+description: Report a reproducible Aura AI Harness problem.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: checkboxes
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: I removed API keys and private conversation content.
+          required: true
+  - type: dropdown
+    attributes:
+      label: Edition
+      options: [Aura AI, Aura AI Korean]
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: macOS and Mac
+      placeholder: macOS 15.5, MacBook Pro M3 Pro
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Provider and model
+      placeholder: Local llama.cpp, gemma-4-e4b-it
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Actual behavior and logs
+      description: Redact secrets and personal data before posting.
+    validations:
+      required: true

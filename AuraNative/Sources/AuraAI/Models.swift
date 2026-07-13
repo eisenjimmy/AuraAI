@@ -4,6 +4,14 @@ func auraText(_ english: String, _ korean: String) -> String {
     AuraEdition.current == .korean ? korean : english
 }
 
+func koreanSubject(_ name: String) -> String {
+    guard let scalar = name.unicodeScalars.last,
+          scalar.value >= 0xAC00, scalar.value <= 0xD7A3 else {
+        return name + "가"
+    }
+    return name + ((scalar.value - 0xAC00) % 28 == 0 ? "가" : "이")
+}
+
 enum AuraEdition: String, Codable {
     case english = "en"
     case korean = "ko"

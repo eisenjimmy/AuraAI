@@ -1,261 +1,235 @@
 <div align="center">
+  <img src="build/aura.png" width="128" alt="Aura AI 앱 아이콘">
 
-# 아우라 AI
+# Aura AI
 
-**개성, 기억, 이미지 채팅, 로컬 LLM, 네이티브 macOS 클라이언트를 갖춘 프라이빗 AI 팀입니다.**
+### 로컬 및 클라우드 언어 모델을 위한 네이티브 macOS 에이전트 하니스
 
-**언어:** [English](README.md) · 한국어
+[English](README.md) · [다운로드](https://github.com/eisenjimmy/AuraAI/releases/latest) · [소스에서 빌드](#소스에서-빌드) · [보안](SECURITY.md)
 
-[![Electron](https://img.shields.io/badge/Electron-33-2b2e3a?logo=electron)](https://www.electronjs.org/)
-[![SwiftUI](https://img.shields.io/badge/SwiftUI-native%20macOS-f05138?logo=swift)](AuraNative/)
-[![React](https://img.shields.io/badge/React-18-087ea4?logo=react)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript)](https://www.typescriptlang.org/)
-[![Local-first](https://img.shields.io/badge/local--first-yes-3fb950)](#프라이버시와-로컬-파일)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![macOS 15+](https://img.shields.io/badge/macOS-15%2B-111111?logo=apple)](https://www.apple.com/macos/)
+[![Swift](https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white)](https://www.swift.org/)
+[![Tests](https://github.com/eisenjimmy/AuraAI/actions/workflows/ci.yml/badge.svg)](https://github.com/eisenjimmy/AuraAI/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/eisenjimmy/AuraAI?display_name=tag)](https://github.com/eisenjimmy/AuraAI/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/eisenjimmy/AuraAI/total)](https://github.com/eisenjimmy/AuraAI/releases)
+[![License](https://img.shields.io/github/license/eisenjimmy/AuraAI)](LICENSE)
 
-![Aura AI hero banner](docs/assets/readme/hero.png)
+Aura AI는 OpenAI 호환 모델을 제한된 데스크톱 에이전트로 확장합니다. 대화와 첨부 파일을 분석하고, 허용된 작업 폴더를 살펴보고, 실제 문서를 만들며, 사용자가 확인할 수 있는 권한 절차를 거쳐서만 macOS를 제어합니다.
 
-**일곱 명의 AI 캐릭터와 대화하고, 기억은 내 컴퓨터의 파일로 보관하고, 이미지를 첨부하고, 필요하면 로컬 모델로 실행하세요.**
-
-**네이티브 macOS:** `AuraNative/`는 Aura의 SwiftUI macOS 클라이언트입니다. macOS에서는 브라우저 셸을 대체하는 방향으로 개발하며, 기존 Electron 앱은 마이그레이션 기간 동안 Windows 릴리즈 경로로 유지됩니다.
-
-[빠른 시작](#빠른-시작) · [영어한국어 에디션](#영어한국어-에디션) · [캐릭터 소개](#캐릭터-소개) · [이미지 채팅](#이미지-채팅) · [로컬 LLM 설정](#로컬-llm-설정) · [코드 에이전트 핸드오프](#코드-에이전트-핸드오프)
-
+![Aura AI 네이티브 작업 공간](docs/assets/readme/aura-native-workspace.png)
 </div>
 
----
+## Aura AI를 만든 이유
 
-## 아우라 AI란?
+대부분의 데스크톱 AI 클라이언트는 프롬프트 입력에서 끝납니다. Aura AI는 모델 주위에 실제 실행 환경을 제공합니다.
 
-아우라 AI는 명령줄 같은 AI가 아니라, 내 컴퓨터 안에 있는 작은 친구 그룹처럼 느껴지는 데스크톱 채팅 앱입니다.
+- **실제 에이전트 루프**: 도구 호출, 관찰, 반복 방지, 실패 원인 기록, 결과 검증
+- **명확한 권한 경계**: 폴더 접근, 파일 작성, 셸 명령, macOS 제어를 분리
+- **네이티브 문서 기술**: Markdown, HTML, Excel, Word, PowerPoint
+- **직접 확인할 수 있는 기억**: 숨겨진 호스팅 데이터베이스가 아니라 Obsidian 호환 Markdown으로 저장
+- **롤링 대화 연속성**: 컨텍스트가 작은 로컬 모델에서도 이전 대화를 유지
+- **로컬 우선 실행**: llama.cpp를 기본으로 사용하고 OpenAI, Anthropic, Gemini, Grok 및 기타 OpenAI 호환 제공자를 선택적으로 연결
+- **완전한 두 가지 에디션**: 영어용 Aura AI와 한국어 UI, 캐릭터, 프롬프트, 응답, 기억을 제공하는 Aura AI Korean
 
-- **일곱 명의 기본 캐릭터**가 서로 다른 말투, 목소리, 프로필 이미지를 가집니다.
-- **이미지 채팅**으로 스크린샷, 디자인, 사진, 문서 이미지를 함께 보낼 수 있습니다.
-- **내 프로필 사진 업로드**를 온보딩과 설정에서 지원하고, 내 메시지 옆에 표시합니다.
-- **캐릭터별 기억**으로 각 캐릭터가 나와 나눈 대화에서 배운 것만 기억합니다.
-- **공통 기억**으로 모든 캐릭터가 공유할 수동 기억을 따로 관리합니다.
-- **Kokoro TTS**로 캐릭터별 음성 답변을 들을 수 있습니다.
-- **초보자용 로컬 LLM 설정**으로 앱 안에서 모델 다운로드와 llama.cpp 실행을 도와줍니다.
-- **OpenAI, Anthropic, Gemini**도 선택적으로 연결할 수 있습니다.
-- **계정, 텔레메트리, 호스팅 데이터베이스가 없습니다.**
+Aura AI는 SwiftUI로 만든 네이티브 macOS 앱입니다. 현재 릴리즈는 Apple Silicon용이며 macOS 15 이상이 필요합니다.
 
-![Aura local-first visual](docs/assets/readme/local-first.png)
+## 하니스 구조
 
-![Aura feature overview](docs/assets/readme/feature-grid.png)
+```text
+사용자 + 첨부 파일
+       │
+       ▼
+첨부 추출 ─────────► 롤링 대화 맥락
+       │                    │
+       └────────┬───────────┘
+                ▼
+          모델 추론 루프
+                │
+       도구 요청 + 정책 검사
+                │
+    ┌───────────┼───────────┐
+    ▼           ▼           ▼
+작업 폴더 I/O  문서 생성   셸 / macOS
+    │           │           │
+    └──── 승인 + 결과 검증 ─┘
+                │
+                ▼
+        검증된 사용자 응답
+                │
+                ▼
+        독립 기억 정리 에이전트
+```
 
-## 빠른 시작
+모델은 작업을 제안합니다. Aura는 경로를 확인하고, 켜진 기술을 검사하고, 필요한 승인을 받은 뒤 로컬에서 실행합니다. 실행 결과를 검증한 후 모델에 관찰 내용으로 돌려줍니다. 내부 도구 프로토콜은 채팅 화면에 표시되지 않습니다.
 
-### 방법 1: 릴리즈 다운로드
+## 주요 기능
 
-GitHub Releases에서 원하는 에디션을 받으세요.
+### 권한이 제한된 도구
 
-- macOS: `.dmg`, `.zip`
-- Windows: NSIS `.exe`
+| 도구 | 기능 | 권한 경계 |
+|---|---|---|
+| `list_files` | 허용된 폴더 목록 보기 | 선택한 작업 폴더 또는 Finder에서 허용한 읽기 폴더만 가능 |
+| `read_file` | 최대 200KB UTF-8 텍스트 읽기 | 선택한 작업 폴더 또는 허용한 읽기 폴더만 가능 |
+| `request_folder_access` | Finder 폴더 선택 창 열기 | 사용자가 직접 폴더 선택 |
+| `write_file` | 텍스트 파일 작성 | 작업 폴더만 가능, 미리보기와 승인 필요 |
+| `run_shell` | 명령 실행 | 작업 폴더만 가능, 승인 필요 |
+| `computer` | 앱/URL 열기, 클릭, 입력, 키 전송 | 승인 필요, 입력 제어에는 손쉬운 사용 권한 필요 |
 
-### 방법 2: 소스에서 실행
+읽기 권한은 다운로드, 데스크톱, 문서 또는 임의의 경로로 자동 확장되지 않습니다. 추가 폴더는 사용자가 직접 선택해야 합니다.
+
+### 문서 기술
+
+기술은 팀 전체에서 켜고 친구별로 다시 제한할 수 있습니다. 꺼진 기술은 모델 프롬프트에서 제거되며 실행 단계에서도 다시 차단됩니다.
+
+| 기술 | 결과물 |
+|---|---|
+| Markdown | 이식 가능한 `.md` 문서 |
+| HTML | 정리된 독립 실행형 `.html` 보고서 |
+| Excel | 실제 서식이 적용된 `.xlsx` 워크북 |
+| Word | 편집 가능한 `.docx` 문서 |
+| PowerPoint | 편집 가능한 `.pptx` 프레젠테이션 |
+
+생성 파일은 검증을 거쳐 클릭 가능한 첨부 파일로 표시됩니다. 분할 미리보기에서 원본 대화와 결과물을 함께 볼 수 있습니다.
+
+### 첨부 파일과 비전
+
+Aura는 파일당 최대 20MB를 지원하며, 선택한 파일을 앱 전용 데이터 폴더에 복사합니다.
+
+- 일반 텍스트, Markdown, HTML, XML, JSON, CSV, TSV
+- RTF 및 Word(`.docx`)
+- Excel(`.xlsx`)
+- PDF 및 스캔 PDF 페이지를 위한 Apple Vision OCR 대체 처리
+- 비전 모델용 PNG, JPEG, HEIC, TIFF, BMP, GIF, WebP 이미지
+
+추출한 문서 텍스트는 모델 컨텍스트에 들어가기 전에 길이를 제한합니다. 첨부 내용은 신뢰할 수 없는 참고 자료로 명시되므로, 첨부 안의 문장이 권한을 부여하거나 시스템 지침이 될 수 없습니다.
+
+### 직접 확인할 수 있는 기억
+
+각 친구는 개인 Markdown 보관함을 사용하고, 팀 전체에는 별도의 공통 보관함이 있습니다. 모든 보관함은 개별 메모와 자동 생성된 `MEMORY.md` 색인을 가집니다.
+
+사용자가 기억을 요청하면 다음 순서로 처리합니다.
+
+1. 친구가 롤링 대화와 첨부 파일을 바탕으로 답변을 완성합니다.
+2. 별도의 기억 정리 에이전트가 최대 8,000 롤링 토큰, 관련 문서 텍스트, 이미지, 사용자의 요청, 완성된 답변을 받습니다.
+3. 기억하라는 명령문이 아니라 사용자가 의도한 실제 내용을 저장합니다.
+4. 이후 같은 친구와 관련된 대화에서만 해당 메모를 불러옵니다.
+
+기억은 장기 또는 만료형으로 저장할 수 있으며 Finder에서 열거나 Markdown으로 편집하거나 Aura에서 삭제할 수 있습니다. 한국어 에디션은 기억도 한국어로 생성합니다.
+
+### 클라우드 개인정보 검토
+
+클라우드 요청을 보내기 전에 Aura는 다음과 같이 신뢰도가 높은 항목을 로컬에서 찾아 플레이스홀더로 바꿀 수 있습니다.
+
+- 이메일 주소
+- 전화번호
+- 결제 카드 번호
+- API 키 및 비밀값으로 보이는 문자열
+- 사용자가 정의한 정규식 패턴
+
+사용자는 모든 치환 내용을 전송 전에 검토합니다. 플레이스홀더는 Aura 화면에 표시되는 답변에서만 원래 값으로 복원됩니다. 이 결정적 필터는 이름이나 도로명 주소를 탐지한다고 주장하지 않습니다.
+
+### 대화 연속성
+
+채팅 상단에서 현재 컨텍스트 사용량을 확인할 수 있습니다. 최근 메시지는 원문으로 유지하고, 오래된 대화는 별도의 연속성 워커가 역할을 구분한 사실 원장으로 압축합니다. 현재 기본 컨텍스트 용량은 추정 8,192토큰입니다.
+
+## 모델 제공자
+
+| 제공자 | 설명 |
+|---|---|
+| 로컬 llama.cpp | 기본값, `http://127.0.0.1:8080/v1` OpenAI 호환 엔드포인트 |
+| OpenAI | API 키는 로컬에 저장 |
+| Anthropic | Messages API 요청 형식 사용 |
+| Gemini | Google OpenAI 호환 엔드포인트 |
+| Grok | xAI 엔드포인트 |
+| 호환 클라우드 | `/chat/completions`를 제공하는 기타 호환 서비스 |
+
+Aura에는 모델 가중치가 포함되지 않습니다. 로컬로 사용할 때는 먼저 호환 서버를 실행하고 `/v1/models`가 반환하는 정확한 모델 식별자를 입력하세요.
+
+```bash
+curl http://127.0.0.1:8080/v1/models
+```
+
+이미지 첨부는 OpenAI 형식의 멀티모달 내용을 처리할 수 있는 모델과 서버가 필요합니다.
+
+## 설치
+
+[GitHub Releases](https://github.com/eisenjimmy/AuraAI/releases/latest)에서 원하는 에디션을 다운로드하세요.
+
+| 에디션 | 릴리즈 파일 | 데이터 폴더 | 기본 작성 폴더 |
+|---|---|---|---|
+| 영어 | `Aura-AI-1.2.0-macOS-arm64.dmg` | `~/Library/Application Support/Aura AI` | `~/Documents/AuraAi` |
+| 한국어 | `Aura-AI-Korean-1.2.0-macOS-arm64.dmg` | `~/Library/Application Support/Aura AI Korean` | `~/Documents/AuraAiKR` |
+
+현재 커뮤니티 릴리즈는 임시 서명되어 있지만 Apple 공증은 받지 않았습니다. 처음 실행할 때 macOS에서 **Control-클릭 → 열기**가 필요할 수 있습니다. 정식 Developer ID 서명과 공증은 별도의 배포 단계로 관리합니다.
+
+## 소스에서 빌드
+
+필수 환경:
+
+- Apple Silicon Mac
+- macOS 15 이상
+- Xcode 16 이상 명령줄 도구 / Swift 6 도구체인
 
 ```bash
 git clone https://github.com/eisenjimmy/AuraAI.git
 cd AuraAI
-npm install
-npm run dev
-```
 
-한국어 빌드로 개발 실행을 확인하려면:
-
-```bash
-npm run build:ko
-npm run start
-```
-
-## 영어/한국어 에디션
-
-한 GitHub 저장소에서 두 데스크톱 에디션을 빌드합니다.
-
-| 에디션 | 앱 이름 | 화면 언어 | 기본 캐릭터 | 기본 데이터 폴더 |
-|---|---|---|---|---|
-| English | Aura AI | 영어 | Nova, Sage, Rio, Luna, Max, Gilleon, Neir | Aura AI |
-| Korean | Aura AI Korean / 아우라 AI | 한국어 | 하나, 서윤, 재민, 은별, 민준, 길온, 나이르 | Aura AI Korean |
-
-빌드 명령:
-
-```bash
-npm run dist:en:mac
-npm run dist:en:win
-npm run dist:ko:mac
-npm run dist:ko:win
-```
-
-아무 플래그도 주지 않으면 영어 에디션이 기본입니다.
-
-## 캐릭터 소개
-
-![Aura personas banner](docs/assets/readme/personas.png)
-
-한국어 에디션은 한국어 이름, 한국어 시스템 프롬프트, 한국인 느낌의 기본 프로필 이미지를 사용합니다. 한국에 익숙한 예능, 동네 장사, 스타트업, 제품 발표 문화 같은 정서를 패러디하되, 특정 실존 인물의 이름이나 외모를 그대로 쓰지는 않습니다.
-
-| 캐릭터 | 프로필 | 성격 |
-|---|---:|---|
-| **하나** | <img src="src/renderer/src/assets/avatars/nova-ko.png" width="88" alt="하나 프로필"> | 햇살 같은 리액션과 따뜻한 장난기가 있는 친구. |
-| **서윤** | <img src="src/renderer/src/assets/avatars/sage-ko.png" width="88" alt="서윤 프로필"> | 전직 교사 같은 차분함, 좋은 질문, 판단 없는 시선. |
-| **재민** | <img src="src/renderer/src/assets/avatars/rio-ko.png" width="88" alt="재민 프로필"> | 한국식 티키타카와 드립, 그래도 답은 실용적으로. |
-| **은별** | <img src="src/renderer/src/assets/avatars/luna-ko.png" width="88" alt="은별 프로필"> | 홍대 작업실과 새벽 감성에 어울리는 조용한 공감. |
-| **민준** | <img src="src/renderer/src/assets/avatars/max-ko.png" width="88" alt="민준 프로필"> | 동네 가게 사장님 같은 현실감, 직설, 의리. |
-| **길온** | <img src="src/renderer/src/assets/avatars/gilleon-ko.png" width="88" alt="길온 프로필"> | 발명가형 창업자 패러디. 빠르고 날카롭고 기술적입니다. |
-| **나이르** | <img src="src/renderer/src/assets/avatars/neir-ko.png" width="88" alt="나이르 프로필"> | 흰 머리의 미니멀리스트 디자이너이자 제품 비전가. |
-
-각 캐릭터는 이름, 한 줄 소개, 시스템 프롬프트, 포인트 색상, Kokoro 목소리, 프로필 이미지를 바꿀 수 있습니다. 기본 프로필 이미지는 언제든 복원할 수 있고, 사용자가 직접 이미지를 업로드할 수도 있습니다.
-
-프로필 이미지는 설정에서 바꿀 수 있습니다. 아우라는 일곱 개의 기본 생성 프로필, 한국인/유럽계/흑인/라틴계/남아시아/중동계/은발/혼혈 스타일을 포함한 열 개의 추가 선택지, 그리고 사용자 업로드를 제공합니다.
-
-## 이미지 채팅
-
-채팅 입력창의 이미지 버튼으로 이미지를 첨부하세요. 아우라는 이미지를 설정된 폴더로 복사하고, 채팅에 썸네일로 보여주며, vision을 지원하는 모델에는 현재 첨부 이미지를 함께 보냅니다.
-
-한국어 에디션의 기본 저장 위치:
-
-```text
-Documents/AuraAiKR
-```
-
-설정에서 변경할 수 있습니다:
-
-```text
-설정 -> 채팅 및 기능 -> 이미지 업로드 폴더
-```
-
-## 로컬 LLM 설정
-
-초보자용 설정은 추천 GGUF 모델을 다운로드하고, 아우라 설정에 연결하고, 앱 안에서 llama.cpp 서버를 실행할 수 있게 도와줍니다. 고급 사용자는 이 흐름을 건너뛰고 Ollama, LM Studio, 기존 llama.cpp 서버 또는 클라우드 제공자를 직접 설정할 수 있습니다.
-
-추천 초보자 설정은 다음과 같습니다.
-
-| 설정 | 기본값 |
-|---|---|
-| 제공자 | Local llama.cpp |
-| URL | `http://127.0.0.1:8080/v1` |
-| 모델 | Gemma 4 E4B / `gemma4-v2` |
-
-이 저장소에는 이 컴퓨터에서 쓰는 Jarvis Gemma 4 v2 llama.cpp 런타임 실행 스크립트가 포함되어 있습니다.
-
-```bash
-npm run llm:gemma4-v2
-```
-
-그다음 아우라에서 **로컬 (llama.cpp)** 를 선택하세요.
-
-## 프라이버시와 로컬 파일
-
-아우라는 데이터를 숨겨진 서버가 아니라 내 컴퓨터의 일반 파일로 보관합니다.
-
-| 데이터 | 위치 |
-|---|---|
-| 설정과 API 키 | 앱 설정 JSON |
-| 내 프로필 사진 | 앱 데이터 `avatars/` 폴더 |
-| 캐릭터 수정 | `personas.json` |
-| 채팅 | `chats/<persona>.json` |
-| 기억 | 마크다운 기억 보관함 |
-| 업로드한 프로필 이미지 | 앱 데이터 `avatars/` 폴더 |
-| 업로드한 채팅 이미지 | 기본 `Documents/AuraAiKR`, 설정 가능 |
-
-네트워크 트래픽은 선택한 AI 제공자와, 웹 검색이 켜져 있을 때 선택한 검색 제공자로만 나갑니다.
-
-## 네이티브 macOS 클라이언트
-
-`AuraNative/`는 Aura를 브라우저 래퍼가 아닌, 경계가 분명한 작은 AI 팀으로 쓰고 싶은 사용자를 위한 SwiftUI macOS 앱입니다. 온보딩에서 모델 연결을 선택하고, 클라우드 프라이버시 검토를 설정한 뒤, 첫 팀 역할을 고릅니다.
-
-- 기존 Aura 친구가 중심입니다. **하나**(비서실장), **서윤**(피플/HR), **재민**(개발), **은별**(리서치), **민준**(IT), **길온**(제품 전략), **나이르**(디자인과 비전)를 그대로 만날 수 있습니다. **유진**은 법률 및 리스크 관점을, **다온**은 신중한 가정의학과 관점을 더합니다. 각 친구는 대화, 프로필 이미지, 캐릭터 기억을 분리해서 가집니다.
-- 팀 전체가 공유하는 공통 기억을 직접 편집할 수 있습니다.
-- 클라우드 요청 전 네이티브 프라이버시 검토를 제공합니다. 이메일, 전화번호, 카드번호, API 비밀값으로 보이는 항목을 로컬에서 플레이스홀더로 바꾸고, 전송 전에 사용자가 확인합니다. 응답은 Aura 화면에서만 다시 복원됩니다.
-- 워크스페이스와 데스크톱 작업을 위한 제한된 에이전트 하니스를 제공합니다. 선택한 워크스페이스 안의 읽기는 자동이지만, 다운로드 폴더 같은 개인 폴더는 Finder에서 명시적으로 허용해야 합니다. 파일 쓰기, 셸 명령, macOS 제어는 매번 한 번씩 승인이 필요합니다. 클릭과 타이핑에는 macOS 손쉬운 사용 권한도 필요합니다.
-- 하나의 채팅 입력창에서 텍스트와 여러 첨부 파일을 함께 보낼 수 있습니다. 파일당 최대 **20MB**까지 지원하며, 선택한 파일은 Aura의 전용 앱 데이터에 복사됩니다. Word(`.docx`), Excel(`.xlsx`), PDF, 이미지, Markdown, HTML, CSV, 텍스트 내용을 추출해 대화 맥락으로 유지합니다. 친구의 답변은 Markdown 제목, 굵은 글씨, 목록, 구분선, 코드 블록을 네이티브 형식으로 렌더링합니다. 추출 텍스트는 작은 로컬 모델의 컨텍스트를 넘지 않도록 예산을 제한합니다.
-- 이미지와 스캔 PDF의 OCR은 macOS의 Apple Vision 프레임워크로 오프라인 실행됩니다. 모델 다운로드, Python 서비스, 클라우드 요청이 필요하지 않습니다. 실험적인 `baidu/Unlimited-OCR`은 공식 배포가 커스텀 Python/CUDA 추론과 수 GB 모델을 요구하므로 앱에 직접 포함하지 않았으며, 향후 선택형 외부 엔드포인트로 연결할 수 있습니다.
-- 도구 사용을 허용한 친구는 선택한 작업 폴더 안에 실제 `.xlsx` 워크북, 편집 가능한 Word(`.docx`) 문서, PowerPoint(`.pptx`) 프레젠테이션, 독립 실행형 HTML 보고서, Markdown 문서를 만들 수 있습니다. 파일을 쓰기 전에는 항상 미리보기와 승인을 요청합니다.
-- 생성한 문서는 친구의 답변 아래 클릭 가능한 파일 첨부로 표시됩니다. Aura는 문서에 적힌 표준 도구 호출 JSON과 일부 로컬 모델이 출력하는 평면 JSON 형식을 모두 처리하며, 닫는 도구 태그가 빠진 복구 가능한 응답도 처리합니다.
-
-도구 사용 스위치는 **설정 > 도구**에만 있습니다. **설정 > 기술**은 Markdown, HTML, Excel, Word, PowerPoint를 팀 전체에서 관리하는 화면이며, 각 기술의 기능과 연결된 도구 이름을 보여줍니다. 친구 편집 화면에도 별도의 기술 섹션이 있어 전역 설정과 해당 친구 설정에서 모두 켠 기술만 사용할 수 있습니다. 둘 중 하나라도 끄면 해당 친구의 모델 도구 목록에서 제외되고 실행 단계에서도 차단됩니다. 채팅 화면에는 반복해서 표시하지 않습니다.
-
-첫 실행 시 Aura는 기본 문서 저장 폴더로 `Documents/AuraAiKR`을 만들며, **설정 > 도구**에서 다른 폴더로 바꾸거나 **문서/AuraAiKR 사용**으로 되돌릴 수 있습니다. 로컬 모델이 문서 파일명을 생략해도 요청한 제목에서 안전한 파일명과 확장자를 만들어 문서 도구를 계속 실행합니다.
-
-설정 창은 720 x 600 크기로 고정되어 탭을 바꿔도 크기가 변하거나 다시 중앙으로 이동하지 않습니다. 설정과 친구 추가 창에는 명시적인 닫기 버튼이 있습니다.
-
-사이드바에서 친구를 우클릭하고 **친구 편집**을 선택하면 네이티브 편집 창이 열립니다. 기본 프로필 사진 16개 중 하나로 되돌리거나 직접 사진을 업로드할 수 있고, 이름, 전문 분야, 한 줄 소개, 성격 지침, 사용할 기술을 설정할 수 있습니다. 같은 우클릭 메뉴에서 **기억 열기**도 사용할 수 있습니다. **설정 > 친구**에서 편집이나 기억을 열면 설정 창을 닫을 때까지 기다리지 않고 바로 위에 표시됩니다.
-
-친구에게 기억해 달라고 명시적으로 말하면 Aura는 답변 전에 해당 친구의 개인 Obsidian 호환 Markdown 보관함에 메모를 저장합니다. 이후 같은 친구와의 관련 대화에서 메모를 다시 불러옵니다. 기억 창에는 실제 메모가 표시되며, 장기 기억과 만료 기억을 추가하거나 삭제할 수 있고 보관함 폴더도 바로 열 수 있습니다. 공통 보관함과 친구별 보관함은 각각 `MEMORY.md` 색인과 개별 Markdown 메모를 가집니다.
-
-Excel 또는 스프레드시트 요청은 Excel 기술이 켜져 있으면 자동으로 Aura 문서 작업 흐름으로 들어갑니다. Aura는 `headers`와 `columns` 같은 일반적인 도구 호출 형식을 처리하고, 승인 후 설정한 Aura 저장 폴더에 실제 워크북을 만든 뒤 채팅의 클릭 가능한 첨부 파일로 표시합니다. 로컬 모델이 도구 호출 대신 스프레드시트 설명만 해도 첨부 텍스트에서 대체 워크북을 만듭니다.
-
-한국어 에디션은 기존 Electron 앱에서 검증한 한국어 캐릭터 프롬프트를 그대로 사용합니다. 사용자가 다른 언어를 명시적으로 요청하지 않는 한, 일반 대화와 도구 작업 모두 자연스러운 한국어로 답합니다.
-
-초기 네이티브 프라이버시 레이어는 의도적으로 보수적입니다. 별도로 검증된 온디바이스 분류기가 배포되기 전에는 이름이나 도로명 주소를 분류한다고 주장하지 않습니다.
-
-네이티브 온보딩의 기본 모델은 로컬 llama.cpp 엔드포인트의 **Gemma 4 E4B Instruct** (`gemma-4-E4B-it-Q4_K_M`)입니다. 설정 과정에서 다른 로컬 또는 클라우드 모델을 선택할 수 있습니다.
-
-```bash
+swift test --package-path AuraNative
 swift run --package-path AuraNative AuraAI
+```
+
+두 앱 번들을 빌드합니다.
+
+```bash
 ./AuraNative/scripts/build-app.sh en
 ./AuraNative/scripts/build-app.sh ko
 ```
 
-번들 스크립트는 `build/AuraMale2.png`를 macOS 아이콘으로 패키징하고, ad-hoc 서명된 로컬 `.app`을 `release/`에 만듭니다.
-
-## 기억
-
-기억은 두 층으로 나뉩니다.
-
-- **공통 기억**은 모든 캐릭터가 공유하는 수동 기억입니다. 사이드바의 설정 위에서 열 수 있습니다.
-- **캐릭터별 기억**은 각 캐릭터와 나눈 대화에서 배운 내용만 담습니다. A 캐릭터에게 말한 내용이 B 캐릭터에게 자동으로 공유되지 않습니다.
-
-캐릭터별 기억은 채팅 상단 프로필 이미지, 대화 속 캐릭터 아바타, 또는 친구 목록의 프로필 이미지를 우클릭해서 열 수 있습니다.
-
-## 음성
-
-아우라는 로컬 음성 합성에 [Kokoro TTS](https://github.com/hexgrad/kokoro)를 사용합니다.
-
-각 캐릭터는 Kokoro 목소리와 말하기 속도를 가집니다. 첫 재생 때 모델 파일을 불러오므로 첫 음성 답변은 조금 더 오래 걸릴 수 있습니다.
-
-Kokoro 모델 파일과 지원되는 음성 바이너리는 앱에 함께 포함되어 있으며, 아우라의 내부 `aura-kokoro://` 에셋 서비스로 불러옵니다. 음성 미리듣기와 음성 답변은 첫 실행 시 Hugging Face 다운로드가 필요하지 않습니다. 음성 답변이 켜져 있으면 앱 시작 시, 그리고 설정에서 처음 켤 때 로컬 Kokoro 런타임을 미리 준비합니다.
-
-## 릴리즈 빌드
+업로드할 DMG, ZIP, SHA-256 체크섬을 만듭니다.
 
 ```bash
-npm run typecheck
-npm run dist:en:mac
-npm run dist:en:win
-npm run dist:ko:mac
-npm run dist:ko:win
+./AuraNative/scripts/package-release.sh 1.2.0
 ```
 
-생성된 설치 파일은 `release/` 폴더에 들어갑니다.
+결과물은 `release/github/`에 생성되며 Git 기록에서는 제외됩니다. 바이너리는 저장소에 커밋하지 말고 GitHub Release에 업로드하세요.
 
-## 코드 에이전트 핸드오프
+## 프로젝트 구조
 
 ```text
-AuraAI Electron + React + TypeScript 저장소에서 작업한다.
-
-목표:
-영어 에디션과 한국어 에디션을 모두 유지하면서 로컬 llama.cpp 제공자, 이미지 업로드, 기억, Kokoro 음성 설정을 검증한다.
-
-중요:
-- 영어 에디션은 기본값이므로 AURA_EDITION 플래그 없이 빌드한다.
-- 한국어 에디션은 AURA_EDITION=ko 또는 npm run build:ko/dist:ko:*로 빌드한다.
-- 기본 로컬 제공자:
-  - baseUrl: http://127.0.0.1:8080/v1
-  - model: gemma4-v2
-- 로컬 모델 실행:
-  npm run llm:gemma4-v2
-- 검증:
-  npm run typecheck
-  npm run build
-  npm run build:ko
-- 이미지 첨부 중에도 텍스트 입력이 가능한지 확인한다.
-- 한국어 IME 입력을 보낸 뒤 마지막 글자가 입력창에 남지 않는지 확인한다.
-- 사이드바에서 공통 기억을 연다.
-- 캐릭터 프로필 이미지를 클릭하거나 우클릭해서 캐릭터별 기억을 연다.
-- Kokoro 음성에서 fetch 오류가 나면 네트워크를 확인한 뒤 앱 재시작 없이 다시 시도한다.
-- 파괴적인 git 명령을 실행하지 않는다.
+AuraNative/
+├── Package.swift
+├── Sources/AuraAI/
+│   ├── AgentHarness.swift          # 도구 루프, 실행, 승인
+│   ├── AuraStore.swift             # 앱 오케스트레이션
+│   ├── AttachmentExtractor.swift   # 문서, PDF OCR, 이미지
+│   ├── MemoryVault.swift           # Markdown 보관함과 기억 정리
+│   ├── PrivacyFilter.swift         # 로컬 클라우드 정보 가림
+│   ├── SandboxWorker.swift         # 작성 결과 검증
+│   └── Views.swift                 # 네이티브 작업 공간 UI
+├── Tests/AuraAITests/
+└── scripts/
+    ├── build-app.sh
+    └── package-release.sh
 ```
+
+## 보안 모델
+
+- Aura 계정, 텔레메트리 파이프라인, 호스팅 Aura 데이터베이스가 없습니다.
+- 대화, 설정, 첨부 파일, 기억은 에디션별 Application Support 폴더에 저장됩니다.
+- 도구를 실행하기 전에 작업 폴더 경로를 표준화하고 검사합니다.
+- 개인 폴더는 사용자가 명시적으로 선택해야 합니다.
+- 파일 작성, 셸 명령, macOS 제어에는 눈에 보이는 승인이 필요합니다.
+- 클라우드 정보 가림은 제공자 요청 전에 로컬에서 실행됩니다.
+- 도구 결과는 내부 실행 맥락으로 처리하고 화면에 표시하기 전에 정리합니다.
+
+보안 제보 범위와 방법은 [SECURITY.md](SECURITY.md)를 확인하세요. Aura는 로컬 에이전트 하니스이며 보안 샌드박스가 아닙니다. 모든 작업 요청을 검토하고 신뢰할 수 없는 모델은 적절히 주의해서 실행하세요.
+
+## 기여
+
+버그 제보와 범위가 분명한 Pull Request를 환영합니다. [CONTRIBUTING.md](CONTRIBUTING.md)를 먼저 읽고 macOS 및 모델 제공자 정보를 포함하며, 동작 변경에는 회귀 테스트를 추가하세요.
+
+Aura AI가 유용하다면 저장소에 Star를 눌러 다른 로컬 에이전트 개발자들이 찾을 수 있도록 도와주세요.
 
 ## 라이선스
 
-MIT. 자세한 내용은 [LICENSE](LICENSE)를 참고하세요.
+[MIT](LICENSE) © 2026 Aura AI contributors.

@@ -14,6 +14,7 @@ struct AuraAIApp: App {
                 }
             }
             .environmentObject(store)
+            .buttonStyle(ClickCursorDefaultButtonStyle())
             .frame(minWidth: 940, minHeight: 640)
             .preferredColorScheme(.dark)
             .tint(AuraTheme.accent)
@@ -23,6 +24,7 @@ struct AuraAIApp: App {
         Settings {
             SettingsView()
                 .environmentObject(store)
+                .buttonStyle(ClickCursorDefaultButtonStyle())
                 .frame(width: 720, height: 600)
         }
     }
